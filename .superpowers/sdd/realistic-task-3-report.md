@@ -83,4 +83,5 @@ One final repeated Claude batch stopped during Helen's request without returning
 ## Delivery state
 
 - The stack is intentionally left running.
-- Final full gates, Git cleanliness, `HEAD == origin/main`, and push status are verified as the final delivery actions after this report is staged.
+- Delivery commit `0a17a49` (`Document expanded demo knowledge base`) and the seven accumulated Task 1–2 commits were pushed together, advancing `origin/main` from `72c675a` through `0a17a49`.
+- This push result is recorded in a report-only follow-up commit. Final Git cleanliness, `HEAD == origin/main`, and the running stack are verified after that follow-up is pushed.
