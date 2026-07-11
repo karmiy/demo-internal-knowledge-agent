@@ -123,7 +123,7 @@ git push origin main
 - Consumes: the production frontend from Task 1
 - Produces: a running, browser-verified desktop and mobile layout
 
-- [ ] **Step 1: Rebuild the Docker stack**
+- [x] **Step 1: Rebuild the Docker stack**
 
 ```bash
 docker compose up -d --build
@@ -131,7 +131,7 @@ docker compose up -d --build
 
 Expected: all four services run; backend and Postgres are healthy.
 
-- [ ] **Step 2: Verify desktop geometry**
+- [x] **Step 2: Verify desktop geometry**
 
 At desktop width, confirm from element bounding boxes:
 
@@ -142,7 +142,7 @@ user bubble right edge is to the right of the Agent answer's right edge for a sh
 Agent row remains left aligned
 ```
 
-- [ ] **Step 3: Verify mobile geometry**
+- [x] **Step 3: Verify mobile geometry**
 
 At a viewport below `800px`, confirm:
 
@@ -153,7 +153,7 @@ Agent row remains left aligned
 no horizontal page overflow is introduced
 ```
 
-- [ ] **Step 4: Run final verification**
+- [x] **Step 4: Run final verification**
 
 ```bash
 pnpm --dir frontend test -- --run
@@ -166,6 +166,6 @@ git diff --check
 
 Expected: zero test failures, successful build, healthy services, backend `{"status":"ok"}`, frontend HTTP 200, and no whitespace errors.
 
-- [ ] **Step 5: Record plan completion**
+- [x] **Step 5: Record plan completion**
 
 Mark all checkboxes complete, commit the plan-only change, and push `main`.
