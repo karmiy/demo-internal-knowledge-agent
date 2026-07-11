@@ -16,30 +16,100 @@
 
 ## 快速启动
 
-1. 创建本地配置：
+这个项目使用 Docker Compose 管理四项服务：前端、后端、文档 Ingest Worker 和 PostgreSQL。Docker Compose 会读取项目根目录的 `docker-compose.yml`，因此不需要分别启动每一项服务。
 
-   ```bash
-   cp .env.example .env
-   ```
+下面的命令都需要在项目根目录执行，并确保 Docker Desktop 已经启动。
 
-2. 修改 `.env`，至少填写：
+### 1. 创建本地配置
 
-   ```dotenv
-   JWT_SECRET=请替换为足够长的随机字符串
-   ANTHROPIC_API_KEY=你的_Anthropic_API_Key
-   ```
+复制配置模板：
 
-3. 启动：
+```bash
+cp .env.example .env
+```
 
-   ```bash
-   docker compose up --build
-   ```
+打开新生成的 `.env`，至少填写：
 
-4. 打开 [http://localhost:3000](http://localhost:3000)。后端 OpenAPI 位于 [http://localhost:8000/docs](http://localhost:8000/docs)。
+```dotenv
+JWT_SECRET=请替换为足够长的随机字符串
+ANTHROPIC_API_KEY=你的_Anthropic_API_Key
+```
 
-如果端口已被占用，可以在 `.env` 设置 `FRONTEND_PORT=13000` 和 `BACKEND_PORT=18000`。
+`.env` 只用于本机，并已被 Git 忽略，不会提交到仓库。
 
-启动过程中 backend 会自动执行 Alembic migration 和幂等 seed；ingest worker 会使用本地 embedding 处理三份示例文档，因此 ingest 本身不需要 Anthropic Key。只有聊天回答会调用 Claude。
+### 2. 第一次启动全部服务
+
+```bash
+docker compose up -d --build
+```
+
+这一条命令会构建项目镜像并启动全部四项服务：
+
+- `--build`：启动前构建最新的前端和后端镜像。
+- `-d`：让服务在后台运行，执行后可以继续使用当前终端。
+
+以后如果代码和依赖没有变化，可以直接使用 `docker compose start` 恢复已经停止的服务。
+
+### 3. 检查是否启动成功
+
+```bash
+docker compose ps
+```
+
+看到 `frontend`、`backend`、`ingest` 和 `postgres` 均处于运行状态，即表示服务已经启动。首次启动可能需要等待十几秒。
+
+### 4. 打开 Demo
+
+- 前端：[http://localhost:3000](http://localhost:3000)
+- 后端 OpenAPI：[http://localhost:8000/docs](http://localhost:8000/docs)
+
+如果端口已被占用，可以在 `.env` 设置 `FRONTEND_PORT=13000` 和 `BACKEND_PORT=18000`，然后访问对应的新端口。
+
+启动过程中，backend 会自动更新数据库结构并写入演示数据；ingest worker 会使用本地 embedding 处理三份示例文档。Ingest 不需要 Anthropic Key，只有生成聊天回答时才会调用 Claude。
+
+## 日常 Docker 操作
+
+### 查看日志
+
+```bash
+docker compose logs -f
+```
+
+这会持续显示所有服务的日志。按 `Ctrl+C` 只会退出日志查看，不会停止服务。
+
+### 停止和再次启动
+
+```bash
+docker compose stop
+```
+
+`stop` 会停止全部服务，但保留容器和数据库数据。下次使用下面的命令即可快速恢复：
+
+```bash
+docker compose start
+```
+
+如果修改了代码、依赖或 Dockerfile，应重新构建并启动：
+
+```bash
+docker compose up -d --build
+```
+
+### 删除容器
+
+```bash
+docker compose down
+```
+
+`down` 会停止并删除这个项目的容器和 Docker 网络，但默认保留 PostgreSQL 数据卷。下次执行 `docker compose up -d` 时，Docker 会重新创建容器。
+
+谨慎使用下面的命令：
+
+```bash
+docker compose down -v
+```
+
+`-v` 会连同 PostgreSQL 数据卷一起删除，已经入库的文档和本地数据都会丢失。
 
 ## 演示账号
 
