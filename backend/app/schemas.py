@@ -41,3 +41,10 @@ class ChatResponse(BaseModel):
 
 class ThreadResponse(BaseModel):
     thread_id: UUID
+
+
+class DocumentResponse(BaseModel):
+    id: UUID
+    title: str
+    status: str
+    error: str | None = None
