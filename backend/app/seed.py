@@ -16,6 +16,7 @@ from app.models import (
     Department,
     Document,
     DocumentPermission,
+    DocumentStatus,
     Role,
     Salary,
     SubjectType,
@@ -102,13 +103,27 @@ def _seed_users(session: Session) -> dict[str, User]:
     return users
 
 
-def _seed_documents(session: Session, admin: User) -> None:
-    settings = get_settings()
-    seed_root = Path("/seed-documents")
-    target_root = Path(settings.document_root)
+def _seed_documents(
+    session: Session,
+    admin: User,
+    *,
+    seed_root: str | Path | None = None,
+    target_root: str | Path | None = None,
+    document_specs: tuple[
+        tuple[str, str, tuple[tuple[SubjectType, str], ...]], ...
+    ]
+    | None = None,
+) -> None:
+    seed_root = Path("/seed-documents") if seed_root is None else Path(seed_root)
+    target_root = (
+        Path(get_settings().document_root)
+        if target_root is None
+        else Path(target_root)
+    )
+    document_specs = DEMO_DOCUMENTS if document_specs is None else document_specs
     target_root.mkdir(parents=True, exist_ok=True)
 
-    for title, filename, permissions in DEMO_DOCUMENTS:
+    for title, filename, permissions in document_specs:
         source = seed_root / filename
         if not source.exists():
             continue
@@ -119,7 +134,9 @@ def _seed_documents(session: Session, admin: User) -> None:
         if not target.exists() or target.read_bytes() != content:
             shutil.copyfile(source, target)
 
-        document = session.scalar(select(Document).where(Document.checksum == checksum))
+        document = session.scalar(
+            select(Document).where(Document.source_path == str(target))
+        )
         if document is None:
             document = Document(
                 title=title,
@@ -129,11 +146,20 @@ def _seed_documents(session: Session, admin: User) -> None:
             )
             session.add(document)
             session.flush()
+        elif document.title != title or document.checksum != checksum:
+            document.title = title
+            document.checksum = checksum
+            document.status = DocumentStatus.PENDING
+            document.error = None
 
+        desired = set(permissions)
         existing = {
-            (item.subject_type, item.subject_id) for item in document.permissions
+            (item.subject_type, item.subject_id): item for item in document.permissions
         }
-        for subject_type, subject_id in permissions:
+        for pair, permission in existing.items():
+            if pair not in desired:
+                session.delete(permission)
+        for subject_type, subject_id in desired:
             if (subject_type, subject_id) not in existing:
                 session.add(
                     DocumentPermission(
