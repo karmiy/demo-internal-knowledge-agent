@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from app.api.documents import get_document_root
 from app.auth.dependencies import get_current_user
@@ -14,16 +15,25 @@ from app.main import app
 
 
 class StubSession:
-    def __init__(self, document: object | None = None) -> None:
+    def __init__(
+        self,
+        document: object | None = None,
+        *,
+        commit_error: Exception | None = None,
+    ) -> None:
         self.added: list[object] = []
         self.commits = 0
+        self.rollbacks = 0
         self.document = document
+        self.commit_error = commit_error
         self.scalar_bind_values: list[object] = []
 
     def scalar(self, statement: object) -> object | None:
         bind_values = list(statement.compile().params.values())  # type: ignore[attr-defined]
         self.scalar_bind_values.extend(bind_values)
         if self.document is None:
+            return None
+        if getattr(self.document, "is_seed", False) and "is_seed" in str(statement):
             return None
         return self.document if self.document.id in bind_values else None
 
@@ -32,6 +42,11 @@ class StubSession:
 
     def commit(self) -> None:
         self.commits += 1
+        if self.commit_error is not None:
+            raise self.commit_error
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
 
 
 def override_session(session: StubSession) -> Generator[StubSession, None, None]:
@@ -115,6 +130,65 @@ def test_admin_upload_rejects_duplicate_checksum(tmp_path: Path) -> None:
     assert response.status_code == 409
     assert response.json() == {"detail": "Document already exists"}
     assert session.added == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_admin_upload_can_match_seed_checksum(tmp_path: Path) -> None:
+    content = b"# Seed guide"
+    checksum = hashlib.sha256(content).hexdigest()
+    user = SimpleNamespace(id=uuid4(), role_names=frozenset({"admin"}))
+    session = StubSession(SimpleNamespace(id=checksum, is_seed=True))
+
+    def session_override() -> Generator[StubSession, None, None]:
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[get_document_root] = lambda: tmp_path
+    try:
+        response = TestClient(app).post(
+            "/api/admin/documents",
+            files={"file": ("guide.md", content)},
+            data={
+                "title": "Guide",
+                "subjects": '[{"type":"authenticated","id":null}]',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    assert len(session.added) == 2
+    assert len(list(tmp_path.iterdir())) == 1
+
+
+def test_admin_upload_integrity_race_returns_conflict(tmp_path: Path) -> None:
+    user = SimpleNamespace(id=uuid4(), role_names=frozenset({"admin"}))
+    session = StubSession(
+        commit_error=IntegrityError("INSERT documents", {}, Exception("unique"))
+    )
+
+    def session_override() -> Generator[StubSession, None, None]:
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[get_document_root] = lambda: tmp_path
+    try:
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/admin/documents",
+            files={"file": ("guide.md", b"# Concurrent")},
+            data={
+                "title": "Guide",
+                "subjects": '[{"type":"authenticated","id":null}]',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Document already exists"}
+    assert session.rollbacks == 1
     assert list(tmp_path.iterdir()) == []
 
 

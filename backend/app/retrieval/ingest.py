@@ -7,9 +7,15 @@ from uuid import UUID
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Document, DocumentChunk, DocumentStatus
+from app.models import (
+    SEED_FILE_STAGING_ERROR,
+    Document,
+    DocumentChunk,
+    DocumentStatus,
+)
 
 SUPPORTED_EXTENSIONS = frozenset({".pdf", ".docx", ".md", ".txt"})
 MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
@@ -177,9 +183,14 @@ def chunk_sections(
 def ingest_document(
     document_id: UUID, session: Session, embedder: object
 ) -> None:
-    document = session.get(Document, document_id)
+    document = session.scalar(_document_for_ingestion_statement(document_id))
     if document is None:
         raise LookupError("document_not_found")
+    if (
+        document.status is DocumentStatus.PROCESSING
+        and document.error == SEED_FILE_STAGING_ERROR
+    ):
+        return
 
     document.status = DocumentStatus.PROCESSING
     document.error = None
@@ -220,3 +231,11 @@ def ingest_document(
         document.error = "document_processing_failed"
         session.flush()
         raise
+
+
+def _document_for_ingestion_statement(document_id: UUID):
+    return (
+        select(Document)
+        .where(Document.id == document_id)
+        .with_for_update()
+    )

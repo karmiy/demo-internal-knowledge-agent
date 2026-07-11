@@ -73,3 +73,18 @@ def test_pending_document_remains_eligible_for_claim(session: Session) -> None:
 
     assert claimed_id == pending.id
     assert pending.status is DocumentStatus.PROCESSING
+
+
+def test_worker_failure_does_not_overwrite_seed_staging_marker(
+    session: Session,
+) -> None:
+    staged = document(DocumentStatus.PROCESSING, "d")
+    staged.error = "seed_file_staging"
+    session.add(staged)
+    session.commit()
+
+    changed = worker.mark_document_failed(session, staged.id)
+
+    assert changed is False
+    assert staged.status is DocumentStatus.PROCESSING
+    assert staged.error == "seed_file_staging"

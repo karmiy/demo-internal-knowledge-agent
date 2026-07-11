@@ -3,9 +3,11 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app.models import Base, Document, DocumentChunk, DocumentStatus
+from app.seed import SEED_FILE_STAGING_ERROR
 from app.retrieval.ingest import (
     DocumentParseError,
     ParsedSection,
@@ -13,6 +15,7 @@ from app.retrieval.ingest import (
     ingest_document,
     parse_document,
 )
+from app.retrieval import ingest as ingest_module
 
 
 def test_markdown_sections_keep_heading_metadata(tmp_path: Path) -> None:
@@ -71,6 +74,54 @@ class FakeEmbedder:
         return [[float(index), 0.5] for index, _text in enumerate(texts)]
 
 
+def test_ingest_lookup_compiles_postgresql_row_lock() -> None:
+    statement = ingest_module._document_for_ingestion_statement(uuid4())
+
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE" in sql
+
+
+def test_ingest_does_not_overwrite_seed_staging_marker(tmp_path: Path) -> None:
+    path = tmp_path / "guide.md"
+    path.write_text("# New\nNew content", encoding="utf-8")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    document = Document(
+        id=uuid4(),
+        title="Guide",
+        source_path=str(path),
+        checksum="e" * 64,
+        created_by=uuid4(),
+        is_seed=True,
+        status=DocumentStatus.PROCESSING,
+        error=SEED_FILE_STAGING_ERROR,
+        chunks=[
+            DocumentChunk(
+                content="Old content",
+                chunk_index=0,
+                chunk_metadata={"embedding_version": "local-hash-v1"},
+                embedding=[0.0],
+            )
+        ],
+    )
+
+    try:
+        with Session(engine) as session:
+            session.add(document)
+            session.commit()
+
+            ingest_document(document.id, session, FakeEmbedder())
+            session.commit()
+
+            session.refresh(document)
+            assert document.status is DocumentStatus.PROCESSING
+            assert document.error == SEED_FILE_STAGING_ERROR
+            assert [chunk.content for chunk in document.chunks] == ["Old content"]
+    finally:
+        engine.dispose()
+
+
 class FakeSession:
     def __init__(self, document: Document) -> None:
         self.document = document
@@ -81,6 +132,10 @@ class FakeSession:
 
     def get(self, _model: object, document_id: object) -> Document | None:
         return self.document if document_id == self.document.id else None
+
+    def scalar(self, statement: object) -> Document | None:
+        bind_values = list(statement.compile().params.values())  # type: ignore[attr-defined]
+        return self.document if self.document.id in bind_values else None
 
     def add_all(self, values: list[object]) -> None:
         self.events.append("add_all")

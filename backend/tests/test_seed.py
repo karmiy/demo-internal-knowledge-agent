@@ -6,8 +6,12 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
+from app import seed as seed_module
+from app.ingestion.worker import claim_pending_document
 from app.models import (
     Base,
     Document,
@@ -50,14 +54,102 @@ def seed_one(
         (SubjectType.AUTHENTICATED, "*"),
     ),
 ) -> None:
-    _seed_documents(
-        session,
-        admin,
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    seed_module.reconcile_seed_documents(
+        admin.id,
+        session_factory=factory,
         seed_root=seed_root,
         target_root=target_root,
         document_specs=((title, "guide.md", permissions),),
     )
-    session.flush()
+    session.expire_all()
+
+
+def test_seed_lookup_compiles_postgresql_row_lock(tmp_path: Path) -> None:
+    statement = seed_module._seed_document_for_update_statement(
+        tmp_path / "guide.md"
+    )
+
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE" in sql
+
+
+def test_seed_helper_does_not_commit_caller_transaction(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "guide.md").write_bytes(b"uncommitted")
+
+    preparation = _seed_documents(
+        session,
+        admin,
+        seed_root=seed_root,
+        target_root=target_root,
+        document_specs=(
+            (
+                "Guide",
+                "guide.md",
+                ((SubjectType.AUTHENTICATED, "*"),),
+            ),
+        ),
+    )
+
+    assert session.in_transaction()
+    session.rollback()
+    preparation.cleanup()
+    assert session.scalar(select(Document)) is None
+    assert not (target_root / "guide.md").exists()
+
+
+def test_seed_is_unclaimable_until_file_is_installed(
+    session: Session,
+    admin: User,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "guide.md").write_bytes(b"staged bytes")
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    real_replace = os.replace
+    observed: list[tuple[DocumentStatus, str | None]] = []
+
+    def observe_replace(source_path: str | Path, target_path: str | Path) -> None:
+        with factory() as observer:
+            document = observer.scalar(select(Document))
+            assert document is not None
+            observed.append((document.status, document.error))
+            assert claim_pending_document(observer) is None
+        real_replace(source_path, target_path)
+
+    monkeypatch.setattr(os, "replace", observe_replace)
+    seed_module.reconcile_seed_documents(
+        admin.id,
+        session_factory=factory,
+        seed_root=seed_root,
+        target_root=target_root,
+        document_specs=(
+            (
+                "Guide",
+                "guide.md",
+                ((SubjectType.AUTHENTICATED, "*"),),
+            ),
+        ),
+    )
+
+    assert observed == [
+        (DocumentStatus.PROCESSING, seed_module.SEED_FILE_STAGING_ERROR)
+    ]
+    session.expire_all()
+    document = session.scalar(select(Document))
+    assert document is not None
+    assert document.status is DocumentStatus.PENDING
+    assert document.error is None
 
 
 def test_changed_seed_updates_same_document_and_requeues(
@@ -120,11 +212,39 @@ def test_seed_checksum_can_match_user_uploaded_document(
         ("User upload", str(upload_path)),
     ]
     assert {document.checksum for document in documents} == {checksum}
+    assert [document.is_seed for document in documents] == [True, False]
     assert upload_path.read_bytes() == content
 
 
+def test_model_rejects_two_uploaded_documents_with_same_checksum(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    checksum = "f" * 64
+    session.add_all(
+        [
+            Document(
+                title="Upload one",
+                source_path=str(tmp_path / "one.md"),
+                checksum=checksum,
+                created_by=admin.id,
+                is_seed=False,
+            ),
+            Document(
+                title="Upload two",
+                source_path=str(tmp_path / "two.md"),
+                checksum=checksum,
+                created_by=admin.id,
+                is_seed=False,
+            ),
+        ]
+    )
+
+    with pytest.raises(IntegrityError):
+        session.flush()
+
+
 def test_database_failure_leaves_existing_target_untouched(
-    session: Session, admin: User, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    session: Session, admin: User, tmp_path: Path
 ) -> None:
     seed_root = tmp_path / "seed"
     target_root = tmp_path / "documents"
@@ -140,12 +260,31 @@ def test_database_failure_leaves_existing_target_untouched(
 
     source.write_bytes(b"new bytes")
 
-    def fail_commit() -> None:
-        raise RuntimeError("injected commit failure")
+    base_factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
 
-    monkeypatch.setattr(session, "commit", fail_commit)
+    def failing_factory() -> Session:
+        failing_session = base_factory()
+
+        def fail_commit() -> None:
+            raise RuntimeError("injected commit failure")
+
+        failing_session.commit = fail_commit  # type: ignore[method-assign]
+        return failing_session
+
     with pytest.raises(RuntimeError, match="injected commit failure"):
-        seed_one(session, admin, seed_root, target_root)
+        seed_module.reconcile_seed_documents(
+            admin.id,
+            session_factory=failing_factory,
+            seed_root=seed_root,
+            target_root=target_root,
+            document_specs=(
+                (
+                    "Guide",
+                    "guide.md",
+                    ((SubjectType.AUTHENTICATED, "*"),),
+                ),
+            ),
+        )
 
     assert (target_root / "guide.md").read_bytes() == b"old bytes"
     assert not list(target_root.glob(".guide.md.*.tmp"))
@@ -153,6 +292,48 @@ def test_database_failure_leaves_existing_target_untouched(
     assert stored is not None
     assert stored.checksum == original_checksum
     assert stored.status is DocumentStatus.READY
+
+
+def test_seed_defers_changed_document_owned_by_worker(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    source = seed_root / "guide.md"
+    source.write_bytes(b"old bytes")
+    seed_one(session, admin, seed_root, target_root)
+    document = session.scalar(select(Document))
+    assert document is not None
+    document.status = DocumentStatus.PROCESSING
+    document.error = None
+    session.commit()
+    original_checksum = document.checksum
+
+    source.write_bytes(b"new bytes")
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    with pytest.raises(seed_module.SeedDocumentBusy, match="being processed"):
+        seed_module.reconcile_seed_documents(
+            admin.id,
+            session_factory=factory,
+            seed_root=seed_root,
+            target_root=target_root,
+            document_specs=(
+                (
+                    "Guide",
+                    "guide.md",
+                    ((SubjectType.AUTHENTICATED, "*"),),
+                ),
+            ),
+        )
+
+    session.expire_all()
+    assert document.status is DocumentStatus.PROCESSING
+    assert document.error is None
+    assert document.checksum == original_checksum
+    assert (target_root / "guide.md").read_bytes() == b"old bytes"
+    assert not list(target_root.glob(".guide.md.*.tmp"))
 
 
 def test_atomic_replace_failure_leaves_pending_and_retries(
@@ -184,7 +365,8 @@ def test_atomic_replace_failure_leaves_pending_and_retries(
     stored = session.scalar(select(Document))
     assert stored is not None
     assert stored.checksum == expected_checksum
-    assert stored.status is DocumentStatus.PENDING
+    assert stored.status is DocumentStatus.PROCESSING
+    assert stored.error == seed_module.SEED_FILE_STAGING_ERROR
     assert (target_root / "guide.md").read_bytes() == b"old bytes"
     assert not list(target_root.glob(".guide.md.*.tmp"))
 
@@ -193,6 +375,70 @@ def test_atomic_replace_failure_leaves_pending_and_retries(
 
     assert (target_root / "guide.md").read_bytes() == b"new bytes"
     assert stored.status is DocumentStatus.PENDING
+    assert stored.error is None
+
+
+def test_finalization_failure_recovers_after_file_was_installed(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "guide.md").write_bytes(b"installed before finalization")
+    base_factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    factory_calls = 0
+
+    def finalization_failing_factory() -> Session:
+        nonlocal factory_calls
+        factory_calls += 1
+        created_session = base_factory()
+        if factory_calls == 2:
+
+            def fail_commit() -> None:
+                raise RuntimeError("injected finalization failure")
+
+            created_session.commit = fail_commit  # type: ignore[method-assign]
+        return created_session
+
+    with pytest.raises(RuntimeError, match="injected finalization failure"):
+        seed_module.reconcile_seed_documents(
+            admin.id,
+            session_factory=finalization_failing_factory,
+            seed_root=seed_root,
+            target_root=target_root,
+            document_specs=(
+                (
+                    "Guide",
+                    "guide.md",
+                    ((SubjectType.AUTHENTICATED, "*"),),
+                ),
+            ),
+        )
+
+    session.expire_all()
+    document = session.scalar(select(Document))
+    assert document is not None
+    assert document.status is DocumentStatus.PROCESSING
+    assert document.error == seed_module.SEED_FILE_STAGING_ERROR
+    assert (target_root / "guide.md").read_bytes() == b"installed before finalization"
+
+    seed_module.reconcile_seed_documents(
+        admin.id,
+        session_factory=base_factory,
+        seed_root=seed_root,
+        target_root=target_root,
+        document_specs=(
+            (
+                "Guide",
+                "guide.md",
+                ((SubjectType.AUTHENTICATED, "*"),),
+            ),
+        ),
+    )
+
+    session.expire_all()
+    assert document.status is DocumentStatus.PENDING
+    assert document.error is None
 
 
 def test_title_only_change_requeues_document(

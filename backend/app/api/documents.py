@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import CurrentUser, SessionDependency
@@ -77,7 +78,12 @@ async def upload_document(
         await file.close()
 
     checksum = digest.hexdigest()
-    if session.scalar(select(Document.id).where(Document.checksum == checksum)) is not None:
+    if session.scalar(
+        select(Document.id).where(
+            Document.checksum == checksum,
+            Document.is_seed.is_(False),
+        )
+    ) is not None:
         destination.unlink(missing_ok=True)
         raise HTTPException(status_code=409, detail="Document already exists")
 
@@ -86,6 +92,7 @@ async def upload_document(
         title=title.strip(),
         source_path=str(destination),
         checksum=checksum,
+        is_seed=False,
         created_by=user.id,
         status=DocumentStatus.PENDING,
     )
@@ -98,7 +105,12 @@ async def upload_document(
         for subject_type, subject_id in parsed_subjects
     ]
     session.add_all([document, *permissions])
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail="Document already exists") from exc
     return _response(document)
 
 

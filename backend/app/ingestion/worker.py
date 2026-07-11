@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.embeddings import LocalHashEmbeddings, build_local_embedder
-from app.models import Document, DocumentChunk, DocumentStatus
+from app.models import (
+    SEED_FILE_STAGING_ERROR,
+    Document,
+    DocumentChunk,
+    DocumentStatus,
+)
 from app.retrieval.ingest import INDEX_VERSION, ingest_document
 
 
@@ -55,6 +60,24 @@ def claim_pending_document(session: Session) -> UUID | None:
     return document.id
 
 
+def mark_document_failed(session: Session, document_id: UUID) -> bool:
+    document = session.scalar(
+        select(Document)
+        .where(Document.id == document_id)
+        .with_for_update()
+    )
+    if document is None or (
+        document.status is DocumentStatus.PROCESSING
+        and document.error == SEED_FILE_STAGING_ERROR
+    ):
+        session.commit()
+        return False
+    document.status = DocumentStatus.FAILED
+    document.error = "document_processing_failed"
+    session.commit()
+    return True
+
+
 def run_worker(
     *,
     once: bool = False,
@@ -80,10 +103,6 @@ def run_worker(
                 ingest_session.commit()
             except Exception:
                 ingest_session.rollback()
-                failed_document = ingest_session.get(Document, document_id)
-                if failed_document is not None:
-                    failed_document.status = DocumentStatus.FAILED
-                    failed_document.error = "document_processing_failed"
-                    ingest_session.commit()
+                mark_document_failed(ingest_session, document_id)
         if once:
             return

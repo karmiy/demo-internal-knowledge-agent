@@ -23,6 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -34,6 +35,9 @@ class DocumentStatus(str, Enum):
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
+
+
+SEED_FILE_STAGING_ERROR = "seed_file_staging"
 
 
 class SubjectType(str, Enum):
@@ -107,6 +111,15 @@ class UserRole(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index(
+            "uq_documents_upload_checksum",
+            "checksum",
+            unique=True,
+            postgresql_where=text("is_seed = false"),
+            sqlite_where=text("is_seed = 0"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     title: Mapped[str] = mapped_column(String(255))
@@ -118,6 +131,9 @@ class Document(Base):
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     checksum: Mapped[str] = mapped_column(String(64), index=True)
+    is_seed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     created_by: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")
     )
