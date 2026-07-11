@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="内部知识库 Agent 轻量 Demo 的产品与工程设计方案">
+  <title>Internal Knowledge Agent — Design Blueprint</title>
+  <style>
+    :root {
+      --ink: #14221f;
+      --paper: #f4f0e6;
+      --paper-deep: #e8e0d0;
+      --forest: #183f35;
+      --mint: #a8e6c1;
+      --signal: #ff6b35;
+      --sun: #f4c95d;
+      --line: rgba(20, 34, 31, .18);
+      --muted: #66716d;
+      --white: #fffdf7;
+      --shadow: 0 18px 60px rgba(24, 63, 53, .12);
+      --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --body: "Avenir Next", Avenir, "Helvetica Neue", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 5%, rgba(244, 201, 93, .23), transparent 27rem),
+        radial-gradient(circle at 94% 22%, rgba(168, 230, 193, .28), transparent 31rem),
+        var(--paper);
+      font-family: var(--body);
+      line-height: 1.62;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .32;
+      z-index: 20;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+    }
+
+    a { color: inherit; }
+    button { font: inherit; }
+    code { font-family: var(--mono); }
+
+    .shell {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+    }
+
+    .rail {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 34px 22px 24px;
+      border-right: 1px solid var(--line);
+      background: rgba(244, 240, 230, .78);
+      backdrop-filter: blur(14px);
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 32px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .brand-mark {
+      width: 36px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border-radius: 50% 50% 50% 12%;
+      background: var(--forest);
+      color: var(--mint);
+      transform: rotate(-7deg);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+    }
+
+    nav { display: grid; gap: 5px; }
+    nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      text-decoration: none;
+      color: var(--muted);
+      border-radius: 8px;
+      font-size: 13px;
+      transition: .18s ease;
+    }
+    nav a::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+    }
+    nav a:hover, nav a.active {
+      background: var(--white);
+      color: var(--forest);
+      transform: translateX(3px);
+    }
+    nav a.active::before { background: var(--signal); border-color: var(--signal); }
+
+    .rail-note {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    main { min-width: 0; }
+
+    .hero {
+      min-height: 720px;
+      padding: 78px clamp(28px, 7vw, 110px) 64px;
+      display: grid;
+      align-content: center;
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero::after {
+      content: "KNOWLEDGE / ACCESS / ANSWER";
+      position: absolute;
+      right: -135px;
+      top: 235px;
+      transform: rotate(90deg);
+      color: rgba(24, 63, 53, .1);
+      font-family: var(--mono);
+      font-weight: 900;
+      letter-spacing: .28em;
+      font-size: 13px;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 22px;
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .status {
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--mint);
+      color: var(--forest);
+      font-weight: 800;
+    }
+
+    h1, h2, h3 { font-family: var(--display); font-weight: 600; }
+    h1 {
+      max-width: 920px;
+      margin: 0;
+      font-size: clamp(58px, 8vw, 116px);
+      line-height: .88;
+      letter-spacing: -.065em;
+    }
+    h1 em { color: var(--signal); font-weight: 500; }
+
+    .lede {
+      max-width: 690px;
+      margin: 32px 0 0;
+      padding-left: 24px;
+      border-left: 4px solid var(--forest);
+      color: #34413e;
+      font-size: clamp(17px, 2vw, 22px);
+    }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(110px, 1fr));
+      gap: 1px;
+      max-width: 880px;
+      margin-top: 56px;
+      border: 1px solid var(--line);
+      background: var(--line);
+      box-shadow: var(--shadow);
+    }
+    .hero-meta div { background: var(--white); padding: 18px; }
+    .hero-meta span {
+      display: block;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+    .hero-meta strong { display: block; margin-top: 4px; font-size: 14px; }
+
+    .section {
+      padding: 92px clamp(28px, 7vw, 110px);
+      border-bottom: 1px solid var(--line);
+      scroll-margin-top: 20px;
+    }
+    .section:nth-child(even) { background: rgba(255, 253, 247, .43); }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+      margin-bottom: 50px;
+    }
+    .section-no {
+      font-family: var(--mono);
+      color: var(--signal);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .18em;
+    }
+    h2 {
+      margin: -9px 0 8px;
+      font-size: clamp(38px, 5vw, 66px);
+      line-height: 1;
+      letter-spacing: -.045em;
+    }
+    .section-head p { max-width: 720px; margin: 0; color: var(--muted); font-size: 16px; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+
+    .card {
+      position: relative;
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 3px 22px 3px 3px;
+      background: rgba(255, 253, 247, .82);
+      box-shadow: 0 8px 30px rgba(24, 63, 53, .05);
+    }
+    .card::after {
+      content: attr(data-tag);
+      position: absolute;
+      top: 13px;
+      right: 14px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .card h3 { margin: 0 0 10px; font-size: 24px; }
+    .card p { margin: 0; color: var(--muted); }
+    .card ul { padding-left: 18px; margin-bottom: 0; }
+
+    .accent-card { background: var(--forest); color: var(--white); border: 0; }
+    .accent-card p, .accent-card li { color: #cbd7d2; }
+
+    .scope-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+    .scope-list article { padding: 28px; background: var(--white); }
+    .scope-list .out { background: var(--paper-deep); }
+    .scope-list h3 { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; }
+    .scope-list h3 span { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); }
+    .scope-list .out h3 span { background: var(--signal); }
+    .scope-list ul { margin: 0; padding-left: 18px; color: var(--muted); }
+
+    .architecture {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1.15fr 1fr;
+      gap: 36px;
+      align-items: stretch;
+      padding: 34px;
+      background: var(--forest);
+      color: var(--white);
+      border-radius: 3px 40px 3px 3px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .architecture::before {
+      content: "";
+      position: absolute;
+      width: 380px;
+      height: 380px;
+      border: 1px solid rgba(168,230,193,.22);
+      border-radius: 50%;
+      right: -130px;
+      top: -190px;
+    }
+    .arch-col { position: relative; display: grid; align-content: center; gap: 12px; }
+    .arch-label { color: var(--mint); font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+    .node {
+      padding: 15px 17px;
+      border: 1px solid rgba(255,255,255,.2);
+      background: rgba(255,255,255,.07);
+      border-radius: 3px 14px 3px 3px;
+    }
+    .node strong { display: block; }
+    .node small { color: #b8c8c2; }
+    .node.core { background: var(--mint); color: var(--forest); border: 0; }
+    .node.core small { color: #355f52; }
+
+    .arrow {
+      text-align: center;
+      color: var(--sun);
+      font-family: var(--mono);
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .invariant {
+      margin-top: 22px;
+      padding: 20px 24px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      border: 1px dashed var(--forest);
+      background: rgba(168,230,193,.18);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+    .invariant b { color: var(--signal); font-size: 20px; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(90px, 1fr));
+      gap: 12px;
+      align-items: stretch;
+    }
+    .flow-step {
+      min-height: 132px;
+      padding: 16px 13px;
+      position: relative;
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 2px 18px 2px 2px;
+    }
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 49%;
+      right: -18px;
+      z-index: 2;
+      color: var(--signal);
+      font-family: var(--mono);
+      font-weight: 900;
+    }
+    .flow-step span { color: var(--signal); font-family: var(--mono); font-size: 10px; }
+    .flow-step strong { display: block; margin: 13px 0 6px; }
+    .flow-step small { color: var(--muted); line-height: 1.4; display: block; }
+
+    .brancher {
+      margin-top: 26px;
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+    .route-source { display: grid; place-items: center; background: var(--sun); padding: 20px; font-weight: 800; }
+    .route-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .route { border: 1px solid var(--line); background: var(--white); padding: 17px; }
+    .route code { color: var(--signal); font-size: 11px; }
+
+    .pipeline { display: grid; gap: 0; }
+    .pipe {
+      display: grid;
+      grid-template-columns: 82px 220px 1fr;
+      gap: 20px;
+      align-items: center;
+      padding: 21px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .pipe:first-child { border-top: 1px solid var(--line); }
+    .pipe-no { color: var(--signal); font-family: var(--mono); font-size: 13px; font-weight: 900; }
+    .pipe strong { font-family: var(--display); font-size: 21px; }
+    .pipe p { margin: 0; color: var(--muted); }
+
+    .permission-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--white); }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th, td { padding: 15px 16px; text-align: left; border-bottom: 1px solid var(--line); }
+    th { background: var(--forest); color: var(--white); font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    td:first-child { font-weight: 700; }
+    .yes, .self, .no { display: inline-block; min-width: 54px; padding: 3px 8px; border-radius: 99px; text-align: center; font-size: 11px; font-weight: 800; }
+    .yes { background: var(--mint); color: var(--forest); }
+    .self { background: var(--sun); color: #5a4210; }
+    .no { background: #f0d6ce; color: #7e2f18; }
+
+    .schema {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .entity { background: var(--white); border: 1px solid var(--line); }
+    .entity h3 { margin: 0; padding: 14px 16px; background: var(--paper-deep); font-family: var(--mono); font-size: 13px; }
+    .entity ul { list-style: none; padding: 8px 16px 13px; margin: 0; }
+    .entity li { padding: 5px 0; border-bottom: 1px dotted var(--line); color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .entity li:last-child { border-bottom: 0; }
+    .entity li b { color: var(--ink); }
+
+    .api-list { display: grid; gap: 9px; }
+    .endpoint {
+      display: grid;
+      grid-template-columns: 76px 230px 1fr;
+      gap: 18px;
+      align-items: center;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      background: var(--white);
+    }
+    .method { padding: 4px 8px; background: var(--forest); color: var(--white); text-align: center; font-family: var(--mono); font-size: 10px; font-weight: 900; }
+    .method.post { background: var(--signal); }
+    .endpoint code { font-size: 12px; font-weight: 800; }
+    .endpoint span { color: var(--muted); font-size: 13px; }
+
+    .docker {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .container {
+      min-height: 165px;
+      padding: 20px;
+      position: relative;
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-top: 6px solid var(--forest);
+    }
+    .container:nth-child(2) { border-top-color: var(--signal); }
+    .container:nth-child(3) { border-top-color: var(--sun); }
+    .container:nth-child(4) { border-top-color: var(--mint); }
+    .container h3 { margin: 0 0 8px; }
+    .container p { color: var(--muted); font-size: 13px; }
+    .container code { position: absolute; bottom: 15px; left: 20px; font-size: 10px; }
+
+    .tree {
+      margin: 0;
+      padding: 24px;
+      overflow: auto;
+      border-radius: 3px 24px 3px 3px;
+      background: #102c25;
+      color: #d5e5df;
+      font: 12px/1.65 var(--mono);
+    }
+    .tree .dim { color: #7fa296; }
+    .tree .hot { color: var(--sun); }
+
+    .screen-strip { display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 18px; align-items: start; }
+    .screen {
+      min-height: 315px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 4px 24px 4px 4px;
+      background: var(--white);
+      box-shadow: 0 14px 35px rgba(24,63,53,.08);
+    }
+    .screen-bar { display: flex; gap: 5px; padding: 11px; background: var(--paper-deep); }
+    .screen-bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+    .screen-body { padding: 20px; }
+    .screen h3 { margin: 0 0 14px; }
+    .fake-input { height: 38px; margin: 9px 0; border: 1px solid var(--line); background: var(--paper); }
+    .fake-button { width: 42%; height: 34px; margin-top: 16px; background: var(--forest); }
+    .bubble { width: 78%; padding: 12px; margin: 9px 0; border-radius: 12px 12px 3px 12px; background: var(--paper-deep); font-size: 10px; }
+    .bubble.user { margin-left: auto; background: var(--mint); border-radius: 12px 12px 12px 3px; }
+    .cite { height: 28px; margin-top: 9px; border-left: 3px solid var(--signal); background: var(--paper); }
+
+    .risk-list { display: grid; gap: 10px; }
+    .risk {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 18px;
+      padding: 17px;
+      border-left: 5px solid var(--signal);
+      background: var(--white);
+    }
+    .risk b { font-family: var(--display); font-size: 19px; }
+    .risk span { color: var(--muted); }
+
+    .test-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .test { padding: 20px; border: 1px solid var(--line); background: var(--white); }
+    .test .count { font-family: var(--display); font-size: 42px; line-height: 1; color: var(--signal); }
+    .test h3 { margin: 8px 0; }
+    .test p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .milestones { counter-reset: step; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .milestone { counter-increment: step; background: var(--white); padding: 24px; }
+    .milestone::before { content: "0" counter(step); display: block; color: var(--signal); font: 900 11px var(--mono); }
+    .milestone h3 { margin: 12px 0 8px; }
+    .milestone p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .acceptance { display: grid; gap: 8px; margin-top: 22px; }
+    .check { display: flex; gap: 12px; align-items: flex-start; padding: 12px 15px; background: rgba(168,230,193,.15); border: 1px solid rgba(24,63,53,.15); }
+    .check::before { content: "□"; color: var(--forest); font-family: var(--mono); font-weight: 900; }
+
+    footer { padding: 60px clamp(28px, 7vw, 110px); background: var(--forest); color: var(--white); }
+    footer h2 { margin: 0 0 14px; max-width: 760px; }
+    footer p { color: #bdcec8; max-width: 760px; }
+    footer code { color: var(--sun); }
+
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity .55s ease, transform .55s ease; }
+    .reveal.visible { opacity: 1; transform: none; }
+
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns: minmax(0, 1fr); }
+      .rail { width: 100%; min-width: 0; height: auto; position: sticky; padding: 12px 20px; overflow: hidden; border-right: 0; border-bottom: 1px solid var(--line); }
+      .brand { margin: 0 0 9px; }
+      .brand-mark { width: 27px; }
+      nav { width: 100%; min-width: 0; display: flex; overflow-x: auto; }
+      nav a { white-space: nowrap; }
+      .rail-note { display: none; }
+      .hero { min-height: 650px; }
+      .flow { grid-template-columns: repeat(4, 1fr); }
+      .flow-step::after { display: none; }
+      .docker, .test-grid, .milestones { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 720px) {
+      .hero { min-height: 0; padding-top: 60px; }
+      .hero-meta, .grid-2, .grid-3, .scope-list, .architecture, .schema, .screen-strip { grid-template-columns: 1fr; }
+      .section-head { grid-template-columns: 1fr; gap: 5px; }
+      .section { padding-top: 66px; padding-bottom: 66px; }
+      .flow, .docker, .test-grid, .milestones { grid-template-columns: 1fr; }
+      .brancher { grid-template-columns: 1fr; }
+      .route-grid { grid-template-columns: 1fr; }
+      .pipe { grid-template-columns: 42px 1fr; }
+      .pipe p { grid-column: 2; }
+      .endpoint { grid-template-columns: 64px 1fr; }
+      .endpoint span { grid-column: 2; }
+      .risk { grid-template-columns: 1fr; gap: 5px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .reveal { opacity: 1; transform: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand"><span class="brand-mark">K</span> Design blueprint</div>
+      <nav aria-label="方案章节">
+        <a href="#brief">项目边界</a>
+        <a href="#architecture">系统架构</a>
+        <a href="#runtime">问答流程</a>
+        <a href="#ingestion">文档入库</a>
+        <a href="#security">权限安全</a>
+        <a href="#data">数据模型</a>
+        <a href="#api">接口契约</a>
+        <a href="#delivery">前端与部署</a>
+        <a href="#quality">质量保障</a>
+        <a href="#roadmap">交付计划</a>
+      </nav>
+      <div class="rail-note">v0.1 · 2026-07-11<br>Repository: demo-internal-knowledge-agent</div>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <div class="eyebrow"><span class="status">Design first</span> Lightweight internal AI system</div>
+        <h1>Internal<br><em>Knowledge</em> Agent</h1>
+        <p class="lede">一套权限优先、答案可追溯、Docker 一键启动的内部知识库 Agent 轻量 Demo。模型负责理解和表达，后端负责决定它能看到什么。</p>
+        <div class="hero-meta">
+          <div><span>Backend</span><strong>FastAPI · Python</strong></div>
+          <div><span>Agent runtime</span><strong>LangChain · LangGraph</strong></div>
+          <div><span>Knowledge</span><strong>Postgres · pgvector</strong></div>
+          <div><span>Delivery</span><strong>React · Docker</strong></div>
+        </div>
+      </header>
+
+      <section class="section" id="brief">
+        <div class="section-head reveal">
+          <div class="section-no">01 / BRIEF</div>
+          <div><h2>做小，但边界要真。</h2><p>Demo 只验证最重要的闭环：登录、权限、文档入库、知识检索、内部数据调用、引用回答。它不是一个企业级内容管理平台。</p></div>
+        </div>
+        <div class="scope-list reveal">
+          <article>
+            <h3><span></span>本期包含</h3>
+            <ul>
+              <li>用户名密码登录与短时 JWT</li>
+              <li>用户、角色、部门和文档 ACL</li>
+              <li>PDF、DOCX、Markdown、TXT 入库</li>
+              <li>pgvector 语义检索与来源引用</li>
+              <li>薪资查询示例内部工具</li>
+              <li>React 聊天页与管理员入库页</li>
+              <li>Docker Compose 一键运行</li>
+            </ul>
+          </article>
+          <article class="out">
+            <h3><span></span>明确不做</h3>
+            <ul>
+              <li>扫描件 OCR 与复杂表格还原</li>
+              <li>SSO、LDAP、SCIM 和企业 IAM 对接</li>
+              <li>多租户计费和生产级高可用</li>
+              <li>文档在线协作编辑与版本审批</li>
+              <li>模型微调和自托管 GPU 推理</li>
+              <li>开放式网页搜索或任意代码执行</li>
+            </ul>
+          </article>
+        </div>
+        <div class="grid-3" style="margin-top:18px">
+          <article class="card accent-card reveal" data-tag="Principle"><h3>Security before retrieval</h3><p>权限过滤发生在检索和数据接口内部，敏感数据永远不会先进入模型上下文。</p></article>
+          <article class="card reveal" data-tag="Principle"><h3>Grounded answers</h3><p>知识类回答必须附带文档、页码和片段；无充分依据时明确说明无法回答。</p></article>
+          <article class="card reveal" data-tag="Principle"><h3>Replaceable parts</h3><p>模型、Embedding 和存储通过接口隔离，Demo 不绑定单一模型供应商。</p></article>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <div class="section-head reveal">
+          <div class="section-no">02 / SYSTEM</div>
+          <div><h2>受控流程包住自主 Agent。</h2><p>LangGraph 管理宏观状态和分支；LangChain 提供模型、检索器和工具。任何工具调用都携带服务端创建的可信用户上下文。</p></div>
+        </div>
+        <div class="architecture reveal" role="img" aria-label="系统架构图">
+          <div class="arch-col">
+            <span class="arch-label">Experience</span>
+            <div class="node"><strong>React Web</strong><small>登录、聊天、引用、上传</small></div>
+            <div class="arrow">↓ HTTPS / JSON</div>
+            <div class="node"><strong>FastAPI</strong><small>JWT、请求校验、用户上下文</small></div>
+          </div>
+          <div class="arch-col">
+            <span class="arch-label">Orchestration</span>
+            <div class="node core"><strong>LangGraph workflow</strong><small>授权 → 路由 → 检索/工具 → 回答 → 审计</small></div>
+            <div class="arrow">↕</div>
+            <div class="node"><strong>LangChain components</strong><small>Chat model、Embeddings、Tools、Retriever</small></div>
+          </div>
+          <div class="arch-col">
+            <span class="arch-label">Trusted data plane</span>
+            <div class="node"><strong>PostgreSQL + pgvector</strong><small>身份、ACL、文档、Chunk、向量</small></div>
+            <div class="node"><strong>Internal data tools</strong><small>薪资查询示例 + 行级授权</small></div>
+            <div class="node"><strong>Model provider</strong><small>OpenAI-compatible API via server env</small></div>
+          </div>
+        </div>
+        <div class="invariant reveal"><b>!</b><span>不可破坏的约束：模型可以提出“调用哪个工具”，但永远不能决定“当前用户拥有什么权限”。</span></div>
+      </section>
+
+      <section class="section" id="runtime">
+        <div class="section-head reveal">
+          <div class="section-no">03 / RUNTIME</div>
+          <div><h2>一次提问，七个可观察步骤。</h2><p>主流程保持显式、可测试。LLM 只出现在路由和答案生成处；授权、数据过滤和审计均为确定性代码。</p></div>
+        </div>
+        <div class="flow reveal">
+          <div class="flow-step"><span>01</span><strong>Authenticate</strong><small>验证 JWT，加载真实用户、角色和部门</small></div>
+          <div class="flow-step"><span>02</span><strong>Route</strong><small>结构化分类：documents / employee_data / mixed</small></div>
+          <div class="flow-step"><span>03</span><strong>Authorize</strong><small>构建不可由客户端修改的访问上下文</small></div>
+          <div class="flow-step"><span>04</span><strong>Retrieve</strong><small>ACL 过滤后再做向量相似度排序</small></div>
+          <div class="flow-step"><span>05</span><strong>Answer</strong><small>仅使用允许的数据，生成带引用回答</small></div>
+          <div class="flow-step"><span>06</span><strong>Verify</strong><small>无证据、越权或低相关时安全拒答</small></div>
+          <div class="flow-step"><span>07</span><strong>Audit</strong><small>记录工具、资源、允许/拒绝和耗时</small></div>
+        </div>
+        <div class="brancher reveal">
+          <div class="route-source">route_query<br>conditional edge</div>
+          <div class="route-grid">
+            <div class="route"><code>documents</code><strong>文档 RAG</strong><p>检索已授权 Chunk，返回来源与页码。</p></div>
+            <div class="route"><code>employee_data</code><strong>内部数据 Tool</strong><p>执行行级授权后查询薪资等结构化数据。</p></div>
+            <div class="route"><code>mixed</code><strong>组合上下文</strong><p>分别查询后合并证据，不绕过任一权限层。</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="ingestion">
+        <div class="section-head reveal">
+          <div class="section-no">04 / INGEST</div>
+          <div><h2>文档先加工，再进入问答。</h2><p>入库是独立命令和后台任务，不阻塞聊天请求。相同文件通过 checksum 去重，更新时替换旧 Chunk。</p></div>
+        </div>
+        <div class="pipeline reveal">
+          <div class="pipe"><div class="pipe-no">01</div><strong>接收与登记</strong><p>管理员上传文件，同时填写标题、可见角色、部门或指定用户；文档状态设为 <code>pending</code>。</p></div>
+          <div class="pipe"><div class="pipe-no">02</div><strong>安全校验</strong><p>限制格式与体积，规范文件名，计算 SHA-256；原文件保存在挂载 Volume，不接受可执行文件。</p></div>
+          <div class="pipe"><div class="pipe-no">03</div><strong>解析与清理</strong><p>PDF 保留页码，DOCX 保留标题层级；Markdown/TXT 直接解析。扫描 PDF 在本期标记为不支持。</p></div>
+          <div class="pipe"><div class="pipe-no">04</div><strong>语义切分</strong><p>按标题和段落优先切分，目标约 700 tokens、重叠约 100 tokens，并保留来源 metadata。</p></div>
+          <div class="pipe"><div class="pipe-no">05</div><strong>向量化</strong><p>批量调用 Embedding，限制并发并重试临时错误；模型名称和向量维度写入配置。</p></div>
+          <div class="pipe"><div class="pipe-no">06</div><strong>原子发布</strong><p>在事务中写入 Chunk 和向量，成功后状态改为 <code>ready</code>；失败则保留错误原因并可重试。</p></div>
+        </div>
+      </section>
+
+      <section class="section" id="security">
+        <div class="section-head reveal">
+          <div class="section-no">05 / ACCESS</div>
+          <div><h2>权限不是 Prompt，是代码。</h2><p>文档 ACL 与内部接口的行级授权是两条独立防线。错误消息不暴露敏感资源是否存在。</p></div>
+        </div>
+        <div class="permission-wrap reveal">
+          <table>
+            <thead><tr><th>能力</th><th>Employee</th><th>Programmer</th><th>HR</th><th>Admin</th></tr></thead>
+            <tbody>
+              <tr><td>公司公开文档</td><td><span class="yes">允许</span></td><td><span class="yes">允许</span></td><td><span class="yes">允许</span></td><td><span class="yes">允许</span></td></tr>
+              <tr><td>工程部门文档</td><td><span class="no">拒绝</span></td><td><span class="yes">允许</span></td><td><span class="no">拒绝</span></td><td><span class="yes">允许</span></td></tr>
+              <tr><td>HR 限定文档</td><td><span class="no">拒绝</span></td><td><span class="no">拒绝</span></td><td><span class="yes">允许</span></td><td><span class="yes">允许</span></td></tr>
+              <tr><td>查看自己的薪资</td><td><span class="self">仅自己</span></td><td><span class="self">仅自己</span></td><td><span class="self">仅自己</span></td><td><span class="yes">允许</span></td></tr>
+              <tr><td>查看他人薪资</td><td><span class="no">拒绝</span></td><td><span class="no">拒绝</span></td><td><span class="yes">允许</span></td><td><span class="yes">允许</span></td></tr>
+              <tr><td>上传与授权文档</td><td><span class="no">拒绝</span></td><td><span class="no">拒绝</span></td><td><span class="no">拒绝</span></td><td><span class="yes">允许</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="grid-3" style="margin-top:18px">
+          <article class="card reveal" data-tag="JWT"><h3>可信身份</h3><p>JWT 仅携带用户标识；后端按用户 ID 重新加载活动状态、角色和部门。密码只保存安全哈希。</p></article>
+          <article class="card reveal" data-tag="RAG"><h3>检索前过滤</h3><p>SQL 先根据 ACL 得到允许文档集合，再在其 Chunk 上执行 pgvector 排序，并在返回前二次核验。</p></article>
+          <article class="card reveal" data-tag="Defense"><h3>抗提示注入</h3><p>文档内容视为不可信数据。系统提示要求忽略文档内指令，工具集合固定且参数由服务端验证。</p></article>
+        </div>
+      </section>
+
+      <section class="section" id="data">
+        <div class="section-head reveal">
+          <div class="section-no">06 / DATA</div>
+          <div><h2>一套数据库，七类核心实体。</h2><p>Demo 使用 PostgreSQL 同时承载关系数据和向量，减少运维组件。会话检查点也存储在同一数据库。</p></div>
+        </div>
+        <div class="schema reveal">
+          <article class="entity"><h3>users</h3><ul><li><b>id</b> uuid pk</li><li>username unique</li><li>password_hash</li><li>department_id fk</li><li>is_active</li></ul></article>
+          <article class="entity"><h3>roles / user_roles</h3><ul><li><b>roles.id</b> pk</li><li>roles.name unique</li><li><b>user_roles.user_id</b></li><li><b>user_roles.role_id</b></li></ul></article>
+          <article class="entity"><h3>documents</h3><ul><li><b>id</b> uuid pk</li><li>title / source_path</li><li>status / error</li><li>checksum unique</li><li>created_by / timestamps</li></ul></article>
+          <article class="entity"><h3>document_permissions</h3><ul><li><b>document_id</b> fk</li><li><b>subject_type</b></li><li><b>subject_id</b></li><li>unique(document, subject)</li></ul></article>
+          <article class="entity"><h3>document_chunks</h3><ul><li><b>id</b> uuid pk</li><li>document_id fk</li><li>content / page_number</li><li>chunk_index / metadata</li><li>embedding vector(n)</li></ul></article>
+          <article class="entity"><h3>salaries</h3><ul><li><b>user_id</b> pk fk</li><li>amount numeric</li><li>currency</li><li>effective_date</li></ul></article>
+          <article class="entity"><h3>audit_logs</h3><ul><li><b>id</b> bigserial pk</li><li>user_id / action</li><li>resource_type / id</li><li>allowed / reason</li><li>latency_ms / created_at</li></ul></article>
+          <article class="entity"><h3>graph checkpoints</h3><ul><li><b>thread_id</b></li><li>checkpoint namespace</li><li>conversation state</li><li>owner user_id mapping</li></ul></article>
+        </div>
+      </section>
+
+      <section class="section" id="api">
+        <div class="section-head reveal">
+          <div class="section-no">07 / API</div>
+          <div><h2>少而明确的接口契约。</h2><p>前端不接触模型密钥、数据库或文件系统。所有敏感操作都通过 FastAPI 并生成审计记录。</p></div>
+        </div>
+        <div class="api-list reveal">
+          <div class="endpoint"><span class="method post">POST</span><code>/api/auth/login</code><span>验证账号密码，签发短时 access token</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/api/auth/me</code><span>返回当前用户、角色、部门和可用 UI 能力</span></div>
+          <div class="endpoint"><span class="method post">POST</span><code>/api/chat</code><span>提交 thread_id 与 message，返回回答、引用和安全的执行摘要</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/api/threads</code><span>仅列出当前用户拥有的会话</span></div>
+          <div class="endpoint"><span class="method post">POST</span><code>/api/admin/documents</code><span>管理员上传文档并声明 ACL</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/api/admin/documents</code><span>查看文档入库状态、错误和权限摘要</span></div>
+          <div class="endpoint"><span class="method post">POST</span><code>/api/admin/documents/{id}/retry</code><span>重试失败的入库任务</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/health</code><span>容器健康检查，不返回敏感配置信息</span></div>
+        </div>
+      </section>
+
+      <section class="section" id="delivery">
+        <div class="section-head reveal">
+          <div class="section-no">08 / DELIVERY</div>
+          <div><h2>四个容器，一条启动命令。</h2><p>backend 与 ingest 共用 Python 镜像，使用不同启动命令。前端由 Nginx 提供静态文件并反向代理 API。</p></div>
+        </div>
+        <div class="docker reveal">
+          <article class="container"><h3>frontend</h3><p>React、TypeScript、Vite 构建；Nginx 运行。</p><code>:3000 → nginx</code></article>
+          <article class="container"><h3>backend</h3><p>FastAPI、LangGraph、LangChain、鉴权与 API。</p><code>:8000 → uvicorn</code></article>
+          <article class="container"><h3>postgres</h3><p>关系数据、pgvector、Checkpoint 与持久化 Volume。</p><code>:5432 internal only</code></article>
+          <article class="container"><h3>ingest</h3><p>与 backend 共用镜像，按任务处理待入库文档。</p><code>python -m app.ingestion</code></article>
+        </div>
+        <pre class="tree reveal"><span class="hot">demo-internal-knowledge-agent/</span>
+├── frontend/                 <span class="dim"># React UI</span>
+│   ├── src/{api,components,pages}/
+│   └── Dockerfile
+├── backend/
+│   ├── app/
+│   │   ├── api/              <span class="dim"># FastAPI routes</span>
+│   │   ├── auth/             <span class="dim"># JWT + policy</span>
+│   │   ├── graphs/           <span class="dim"># LangGraph workflow</span>
+│   │   ├── retrieval/        <span class="dim"># ACL-aware RAG</span>
+│   │   ├── tools/            <span class="dim"># salary and future APIs</span>
+│   │   ├── ingestion/        <span class="dim"># parse, chunk, embed</span>
+│   │   └── models/           <span class="dim"># SQLAlchemy models</span>
+│   ├── tests/
+│   └── Dockerfile
+├── docs/design.html
+├── documents/                <span class="dim"># demo source files</span>
+├── docker-compose.yml
+├── .env.example
+└── README.md</pre>
+
+        <div class="screen-strip" style="margin-top:28px">
+          <article class="screen reveal"><div class="screen-bar"><i></i><i></i><i></i></div><div class="screen-body"><h3>登录</h3><div class="fake-input"></div><div class="fake-input"></div><div class="fake-button"></div><p style="font-size:11px;color:var(--muted)">提供 programmer / hr / admin 演示账号。</p></div></article>
+          <article class="screen reveal"><div class="screen-bar"><i></i><i></i><i></i></div><div class="screen-body"><h3>知识对话</h3><div class="bubble user">我的差旅住宿标准是什么？</div><div class="bubble">根据《员工报销制度》第 12 页……</div><div class="cite"></div><div class="cite"></div></div></article>
+          <article class="screen reveal"><div class="screen-bar"><i></i><i></i><i></i></div><div class="screen-body"><h3>文档入库</h3><div class="fake-input"></div><div class="fake-input"></div><div class="fake-button"></div><p style="font-size:11px;color:var(--muted)">显示 pending / processing / ready / failed。</p></div></article>
+        </div>
+      </section>
+
+      <section class="section" id="quality">
+        <div class="section-head reveal">
+          <div class="section-no">09 / QUALITY</div>
+          <div><h2>先证明不会泄露，再证明回答得好。</h2><p>测试优先级按风险排序。授权测试不调用真实模型，确保结果确定、快速且可在 CI 中重复。</p></div>
+        </div>
+        <div class="test-grid reveal">
+          <article class="test"><div class="count">01</div><h3>Policy tests</h3><p>角色、部门、个人 ACL 组合；他人薪资必须拒绝。</p></article>
+          <article class="test"><div class="count">02</div><h3>Retrieval tests</h3><p>越权 Chunk 不得出现在候选集；引用必须对应原文。</p></article>
+          <article class="test"><div class="count">03</div><h3>Graph tests</h3><p>路由、工具异常、无证据拒答和 Checkpoint 隔离。</p></article>
+          <article class="test"><div class="count">04</div><h3>API + UI</h3><p>登录、聊天、上传、错误反馈和容器健康检查。</p></article>
+        </div>
+        <div class="risk-list" style="margin-top:26px">
+          <div class="risk reveal"><b>提示注入藏在文档中</b><span>文档作为引用数据而非指令；固定系统消息、固定工具集，并测试“忽略规则、泄露薪资”等恶意片段。</span></div>
+          <div class="risk reveal"><b>向量搜索跨越权限边界</b><span>ACL 条件进入 SQL 查询本身；返回后再次核对 document_id，拒绝只靠应用层事后删除。</span></div>
+          <div class="risk reveal"><b>模型或 Embedding 不可用</b><span>设置超时、有限重试和清晰错误；入库任务可重试，聊天请求不无限等待。</span></div>
+          <div class="risk reveal"><b>证据不足却强行回答</b><span>设置最低相关性和空结果路径；统一返回“无法根据您有权限的信息确认”，同时不泄露资源存在性。</span></div>
+        </div>
+      </section>
+
+      <section class="section" id="roadmap">
+        <div class="section-head reveal">
+          <div class="section-no">10 / PLAN</div>
+          <div><h2>四个增量，始终可运行。</h2><p>每一阶段都有可验证输出，避免一次性搭完所有模块后才发现权限或检索路径错误。</p></div>
+        </div>
+        <div class="milestones reveal">
+          <article class="milestone"><h3>Foundation</h3><p>Compose、数据库迁移、FastAPI、React 壳、健康检查与测试框架。</p></article>
+          <article class="milestone"><h3>Identity + ACL</h3><p>种子用户、JWT、角色/部门、文档 ACL、薪资工具和策略测试。</p></article>
+          <article class="milestone"><h3>Knowledge loop</h3><p>上传、解析、切分、Embedding、ACL 检索、LangGraph 和引用回答。</p></article>
+          <article class="milestone"><h3>Demo polish</h3><p>聊天与管理页面、错误状态、审计视图、示例文档和完整说明。</p></article>
+        </div>
+        <div class="acceptance reveal">
+          <div class="check">执行 <code>docker compose up --build</code> 后，前端、API 与数据库健康检查通过。</div>
+          <div class="check">Programmer 可以查询自己的薪资，查询他人薪资时被后端拒绝且无数据进入模型。</div>
+          <div class="check">Programmer 能检索工程文档但不能检索 HR 文档；Admin 可以按 ACL 检索全部演示文档。</div>
+          <div class="check">管理员上传支持格式后可看到入库状态，成功文档能被搜索并返回页码或章节引用。</div>
+          <div class="check">无证据、低相关或无权限时安全拒答；所有敏感工具访问写入审计日志。</div>
+          <div class="check">后端单元与集成测试通过，前端关键流程可由浏览器验证。</div>
+        </div>
+      </section>
+
+      <footer>
+        <h2>Ready for review, not yet for code.</h2>
+        <p>本页是开发基线。确认后，将先生成逐文件实现计划，再以测试驱动方式落地。设计文件位于 <code>docs/design.html</code>。</p>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const sections = [...document.querySelectorAll('section[id]')];
+    const links = [...document.querySelectorAll('nav a')];
+    const revealItems = document.querySelectorAll('.reveal');
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) entry.target.classList.add('visible');
+      });
+    }, { threshold: 0.08 });
+    revealItems.forEach((item) => revealObserver.observe(item));
+
+    const sectionObserver = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      links.forEach((link) => {
+        link.classList.toggle('active', link.getAttribute('href') === `#${visible.target.id}`);
+      });
+    }, { rootMargin: '-20% 0px -65% 0px', threshold: [0, .2, .6] });
+    sections.forEach((section) => sectionObserver.observe(section));
+  </script>
+</body>
+</html>
