@@ -117,7 +117,7 @@ class Document(Base):
         index=True,
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    checksum: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    checksum: Mapped[str] = mapped_column(String(64), index=True)
     created_by: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")
     )
@@ -218,4 +218,3 @@ class ThreadOwner(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-

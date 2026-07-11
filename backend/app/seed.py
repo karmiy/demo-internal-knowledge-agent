@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-import shutil
+import os
+import tempfile
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -122,56 +123,90 @@ def _seed_documents(
     )
     document_specs = DEMO_DOCUMENTS if document_specs is None else document_specs
     target_root.mkdir(parents=True, exist_ok=True)
+    staged_targets: list[tuple[Path, Path]] = []
 
-    for title, filename, permissions in document_specs:
-        source = seed_root / filename
-        if not source.exists():
-            continue
+    try:
+        for title, filename, permissions in document_specs:
+            source = seed_root / filename
+            if not source.exists():
+                continue
 
-        content = source.read_bytes()
-        checksum = hashlib.sha256(content).hexdigest()
-        target = target_root / filename
-        if not target.exists() or target.read_bytes() != content:
-            shutil.copyfile(source, target)
-
-        document = session.scalar(
-            select(Document).where(Document.source_path == str(target))
-        )
-        if document is None:
-            document = Document(
-                title=title,
-                source_path=str(target),
-                checksum=checksum,
-                created_by=admin.id,
-            )
-            session.add(document)
-            session.flush()
-        elif document.title != title or document.checksum != checksum:
-            document.title = title
-            document.checksum = checksum
-            document.status = DocumentStatus.PENDING
-            document.error = None
-
-        desired = set(permissions)
-        existing = {
-            (item.subject_type, item.subject_id): item for item in document.permissions
-        }
-        for pair, permission in existing.items():
-            if pair not in desired:
-                session.delete(permission)
-        for subject_type, subject_id in desired:
-            if (subject_type, subject_id) not in existing:
-                session.add(
-                    DocumentPermission(
-                        document=document,
-                        subject_type=subject_type,
-                        subject_id=subject_id,
-                    )
+            content = source.read_bytes()
+            checksum = hashlib.sha256(content).hexdigest()
+            target = target_root / filename
+            file_changed = not target.exists() or target.read_bytes() != content
+            if file_changed:
+                descriptor, staged_name = tempfile.mkstemp(
+                    dir=target.parent,
+                    prefix=f".{target.name}.",
+                    suffix=".tmp",
                 )
+                staged = Path(staged_name)
+                try:
+                    with os.fdopen(descriptor, "wb") as staged_file:
+                        staged_file.write(content)
+                except Exception:
+                    staged.unlink(missing_ok=True)
+                    raise
+                staged_targets.append((staged, target))
+
+            document = session.scalar(
+                select(Document).where(Document.source_path == str(target))
+            )
+            if document is None:
+                document = Document(
+                    title=title,
+                    source_path=str(target),
+                    checksum=checksum,
+                    created_by=admin.id,
+                )
+                session.add(document)
+                session.flush()
+            elif document.title != title or document.checksum != checksum:
+                document.title = title
+                document.checksum = checksum
+                document.status = DocumentStatus.PENDING
+                document.error = None
+            elif file_changed:
+                document.status = DocumentStatus.PENDING
+                document.error = None
+
+            desired = set(permissions)
+            existing = {
+                (item.subject_type, item.subject_id): item
+                for item in document.permissions
+            }
+            for pair, permission in existing.items():
+                if pair not in desired:
+                    session.delete(permission)
+            for subject_type, subject_id in desired:
+                if (subject_type, subject_id) not in existing:
+                    session.add(
+                        DocumentPermission(
+                            document=document,
+                            subject_type=subject_type,
+                            subject_id=subject_id,
+                        )
+                    )
+
+        session.commit()
+    except Exception:
+        for staged, _target in staged_targets:
+            staged.unlink(missing_ok=True)
+        session.rollback()
+        raise
+
+    try:
+        for staged, target in staged_targets:
+            os.replace(staged, target)
+    except Exception:
+        for staged, _target in staged_targets:
+            staged.unlink(missing_ok=True)
+        raise
 
 
 def seed() -> None:
-    with SessionLocal.begin() as session:
+    with SessionLocal() as session:
         users = _seed_users(session)
         _seed_documents(session, users["andy.admin"])
 

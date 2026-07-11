@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from datetime import datetime, timezone
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -85,6 +86,36 @@ def test_admin_upload_creates_pending_document(tmp_path: Path) -> None:
     assert len(session.added) == 2
     assert session.commits == 1
     assert len(list(tmp_path.glob("*.md"))) == 1
+
+
+def test_admin_upload_rejects_duplicate_checksum(tmp_path: Path) -> None:
+    content = b"# Existing guide"
+    checksum = hashlib.sha256(content).hexdigest()
+    user = SimpleNamespace(id=uuid4(), role_names=frozenset({"admin"}))
+    session = StubSession(SimpleNamespace(id=checksum))
+
+    def session_override() -> Generator[StubSession, None, None]:
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[get_document_root] = lambda: tmp_path
+    try:
+        response = TestClient(app).post(
+            "/api/admin/documents",
+            files={"file": ("guide.md", content)},
+            data={
+                "title": "Guide",
+                "subjects": '[{"type":"authenticated","id":null}]',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Document already exists"}
+    assert session.added == []
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_upload_rejects_unsupported_extension(tmp_path: Path) -> None:
