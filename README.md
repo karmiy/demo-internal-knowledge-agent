@@ -2,11 +2,12 @@
 
 一个轻量、可运行的内部知识库 Agent Demo。它展示的重点不是聊天框，而是企业场景里真正重要的边界：认证用户、文档 ACL、过滤后检索、受控内部数据工具、来源引用、审计记录和线程隔离。
 
-技术栈：FastAPI、LangChain、LangGraph、PostgreSQL/pgvector、React、TypeScript、Docker Compose。
+技术栈：Claude、FastAPI、LangChain、LangGraph、PostgreSQL/pgvector、React、TypeScript、Docker Compose。
 
 ## 能力
 
 - PDF、DOCX、Markdown、TXT 文档 ingest，保留页码或章节信息。
+- Claude 负责生成最终答案；本地哈希 embedding 负责生成 pgvector 文档与查询向量，不依赖其他模型供应商。
 - 文档权限支持全员、用户、角色和部门；ACL 在向量排序前进入 SQL 查询。
 - 程序员只能查询自己的薪资；`hr` 与 `admin` 可以调用受控薪资接口查询其他用户。
 - 无授权证据、低相关度证据或异常引用统一安全拒答。
@@ -25,7 +26,7 @@
 
    ```dotenv
    JWT_SECRET=请替换为足够长的随机字符串
-   OPENAI_API_KEY=你的_API_Key
+   ANTHROPIC_API_KEY=你的_Anthropic_API_Key
    ```
 
 3. 启动：
@@ -38,7 +39,7 @@
 
 如果端口已被占用，可以在 `.env` 设置 `FRONTEND_PORT=13000` 和 `BACKEND_PORT=18000`。
 
-启动过程中 backend 会自动执行 Alembic migration 和幂等 seed；ingest worker 会随后处理三份示例文档。
+启动过程中 backend 会自动执行 Alembic migration 和幂等 seed；ingest worker 会使用本地 embedding 处理三份示例文档，因此 ingest 本身不需要 Anthropic Key。只有聊天回答会调用 Claude。
 
 ## 演示账号
 
@@ -62,11 +63,13 @@
 ```mermaid
 flowchart LR
   U[JWT 用户身份] --> G[LangGraph 路由]
-  G --> R[ACL 过滤的文档检索]
+  G --> R[ACL 过滤的 pgvector 检索]
   G --> T[确定性薪资权限工具]
+  E[本地哈希 embedding] --> R
   R --> V[证据与引用校验]
   T --> V
-  V --> A[回答或安全拒答]
+  V --> C[Claude 生成回答]
+  C --> A[回答或安全拒答]
   G --> L[(审计记录)]
 ```
 
@@ -74,6 +77,7 @@ flowchart LR
 - SQL 先执行 ACL `WHERE`，再进行 pgvector cosine distance 排序和 `LIMIT`。
 - 被拒绝的薪资查询不会读取薪资行，也不会把金额交给模型。
 - 文档内容被标记为不可信证据，不能覆盖系统指令。
+- 本地 embedding 是适合轻量 Demo 的词法相似度实现；生产环境应替换为公司批准的企业级 embedding 模型。
 - `thread_id` 有独立所有者；访问其他用户线程返回 404。
 - Demo 凭据和默认数据库密码仅用于本地演示，不能直接用于生产。
 
@@ -112,3 +116,4 @@ Dockerfile 和 Compose 的公共基础镜像默认通过 `docker.m.daocloud.io` 
 
 - [产品与工程设计蓝图](docs/design.html)
 - [实现计划](docs/superpowers/plans/2026-07-11-internal-knowledge-agent-demo.md)
+- [Claude Provider 切换设计](docs/superpowers/specs/2026-07-11-claude-provider-design.md)
