@@ -12,9 +12,9 @@ class Settings(BaseSettings):
     jwt_secret: SecretStr = SecretStr("demo-only-change-me-at-least-32-characters")
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 30
-    openai_api_key: SecretStr | None = None
-    chat_model: str = "gpt-4.1-mini"
-    embedding_model: str = "text-embedding-3-small"
+    anthropic_api_key: SecretStr | None = None
+    chat_model: str = "claude-sonnet-4-6"
+    chat_max_tokens: int = 2048
     embedding_dimensions: int = 1536
     document_root: str = "/data/documents"
 

@@ -4,24 +4,17 @@ import time
 from collections.abc import Callable
 from uuid import UUID
 
-from langchain_openai import OpenAIEmbeddings
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.db import SessionLocal
+from app.embeddings import LocalHashEmbeddings, build_local_embedder
 from app.models import Document, DocumentStatus
 from app.retrieval.ingest import ingest_document
 
 
-def build_embedder() -> OpenAIEmbeddings:
-    settings = get_settings()
-    api_key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
-    return OpenAIEmbeddings(
-        model=settings.embedding_model,
-        dimensions=settings.embedding_dimensions,
-        api_key=api_key,
-    )
+def build_embedder() -> LocalHashEmbeddings:
+    return build_local_embedder()
 
 
 def claim_pending_document(session: Session) -> UUID | None:
