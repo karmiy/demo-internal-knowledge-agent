@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: knowledge
+      POSTGRES_USER: knowledge
+      POSTGRES_PASSWORD: knowledge
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U knowledge -d knowledge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://knowledge:knowledge@postgres:5432/knowledge
+      DOCUMENT_ROOT: /data/documents
+    ports:
+      - "8000:8000"
+    volumes:
+      - document-data:/data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  ingest:
+    build: ./backend
+    command: ["sh", "-c", "echo 'ingestion worker is introduced in Task 5'; sleep infinity"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://knowledge:knowledge@postgres:5432/knowledge
+      DOCUMENT_ROOT: /data/documents
+    volumes:
+      - document-data:/data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  document-data:
+

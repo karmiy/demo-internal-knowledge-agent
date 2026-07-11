@@ -1,0 +1,2 @@
+"""Internal knowledge agent backend."""
+
