@@ -33,7 +33,7 @@
 - Consumes: `content: string`
 - Produces: `MarkdownMessage({ content }: { content: string }): JSX.Element`
 
-- [ ] **Step 1: Add the rendering dependencies**
+- [x] **Step 1: Add the rendering dependencies**
 
 Run:
 
@@ -43,7 +43,7 @@ pnpm --dir frontend add react-markdown remark-gfm
 
 Expected: `frontend/package.json` and `frontend/pnpm-lock.yaml` contain both production dependencies.
 
-- [ ] **Step 2: Write failing semantic and security tests**
+- [x] **Step 2: Write failing semantic and security tests**
 
 Create `frontend/src/components/MarkdownMessage.test.tsx` with tests equivalent to:
 
@@ -77,7 +77,7 @@ it("opens safe links in a separate tab", () => {
 });
 ```
 
-- [ ] **Step 3: Run the component test to verify RED**
+- [x] **Step 3: Run the component test to verify RED**
 
 Run:
 
@@ -87,7 +87,7 @@ pnpm --dir frontend exec vitest run src/components/MarkdownMessage.test.tsx
 
 Expected: FAIL because `./MarkdownMessage` does not exist.
 
-- [ ] **Step 4: Implement the minimal safe renderer**
+- [x] **Step 4: Implement the minimal safe renderer**
 
 Create `frontend/src/components/MarkdownMessage.tsx`:
 
@@ -117,7 +117,7 @@ export function MarkdownMessage({ content }: { content: string }) {
 
 Do not add `rehype-raw`, `dangerouslySetInnerHTML`, or a custom URL transform.
 
-- [ ] **Step 5: Run the focused component tests to verify GREEN**
+- [x] **Step 5: Run the focused component tests to verify GREEN**
 
 Run:
 
