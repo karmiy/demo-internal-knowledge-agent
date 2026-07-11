@@ -40,7 +40,7 @@
 - Produces: `Settings.retrieval_max_distance: float = 0.72`
 - Consumes: existing `ingest_document`, `LocalHashEmbeddings`, `DocumentChunk.metadata`, and `KnowledgeAgent(max_distance=...)`
 
-- [ ] **Step 1: Add failing index-input and version tests**
+- [x] **Step 1: Add failing index-input and version tests**
 
 In `backend/tests/test_ingest.py`, make `FakeEmbedder` record received texts and assert that ingesting title `Guide`, section `Deploy`, and content `Use the release checklist.` sends exactly:
 
@@ -62,7 +62,7 @@ backend/.venv/bin/pytest -q backend/tests/test_ingest.py
 
 Expected: FAIL because ingest currently embeds only `draft.content` and omits `embedding_version`.
 
-- [ ] **Step 2: Implement metadata-aware embedding input**
+- [x] **Step 2: Implement metadata-aware embedding input**
 
 In `backend/app/retrieval/ingest.py`, add:
 
@@ -81,7 +81,7 @@ Use `build_embedding_text(document.title, draft)` for `embed_documents`, and add
 
 Run the focused ingest tests and expect PASS.
 
-- [ ] **Step 3: Add failing stale-index worker tests**
+- [x] **Step 3: Add failing stale-index worker tests**
 
 Create `backend/tests/test_ingestion_worker.py` with tests that compile or execute the stale-document update and prove:
 
@@ -97,13 +97,13 @@ backend/.venv/bin/pytest -q backend/tests/test_ingestion_worker.py
 
 Expected: FAIL because `mark_stale_documents_pending` does not exist.
 
-- [ ] **Step 4: Implement automatic stale-index requeue**
+- [x] **Step 4: Implement automatic stale-index requeue**
 
 Add `mark_stale_documents_pending(session)` using a SQLAlchemy correlated `exists` query. It must update READY documents for which no chunk has metadata key `embedding_version` equal to `local-hash-v2`, commit before polling, and return the affected row count. Invoke it once when `run_worker` starts, before the polling loop.
 
 Do not requeue FAILED documents. Keep the existing `claim_pending_document` transaction and `skip_locked` behavior.
 
-- [ ] **Step 5: Add failing calibrated-distance and configuration tests**
+- [x] **Step 5: Add failing calibrated-distance and configuration tests**
 
 Extend `backend/tests/test_embeddings.py` with the exact title/section/body composites from the seeded employee and engineering documents. Assert cosine distances for these pairs are at most `0.72`:
 
@@ -118,7 +118,7 @@ Extend `backend/tests/test_claude_runtime.py` to assert `RuntimeServices(Setting
 
 Run both focused files and expect the runtime assertion to fail before implementation.
 
-- [ ] **Step 6: Inject the retrieval cutoff through settings**
+- [x] **Step 6: Inject the retrieval cutoff through settings**
 
 Add this field in `backend/app/config.py`:
 
@@ -136,7 +136,7 @@ backend/.venv/bin/pytest -q backend/tests/test_ingest.py backend/tests/test_inge
 
 Expected: all focused tests pass.
 
-- [ ] **Step 7: Commit the local-index fix**
+- [x] **Step 7: Commit the local-index fix**
 
 ```bash
 git add .env.example backend/app/config.py backend/app/retrieval/ingest.py backend/app/ingestion/worker.py backend/app/api/chat.py backend/tests/test_ingest.py backend/tests/test_ingestion_worker.py backend/tests/test_embeddings.py backend/tests/test_claude_runtime.py
@@ -158,7 +158,7 @@ git commit -m "Fix local document retrieval indexing"
 - Produces: `DocumentDetailResponse` extending the list fields with timestamps, permissions, `chunk_count`, and chunks
 - Produces: `GET /api/admin/documents/{document_id}`
 
-- [ ] **Step 1: Write failing detail endpoint tests**
+- [x] **Step 1: Write failing detail endpoint tests**
 
 Add tests for:
 
@@ -177,17 +177,17 @@ backend/.venv/bin/pytest -q backend/tests/test_documents_api.py
 
 Expected: FAIL with `405` or `404` because the GET detail route is absent.
 
-- [ ] **Step 2: Define detail response schemas**
+- [x] **Step 2: Define detail response schemas**
 
 Add Pydantic response models using strings for enum values and timezone-aware datetimes. Keep `DocumentResponse` unchanged so list payloads remain small.
 
-- [ ] **Step 3: Implement the detail route**
+- [x] **Step 3: Implement the detail route**
 
 Load the document with `selectinload(Document.permissions)` and `selectinload(Document.chunks)`. Return permissions in deterministic `(subject_type, subject_id)` order and chunks by `chunk_index`. Raise `HTTPException(404, "Document not found")` when absent.
 
 Run the focused tests and expect PASS.
 
-- [ ] **Step 4: Commit the API**
+- [x] **Step 4: Commit the API**
 
 ```bash
 git add backend/app/schemas.py backend/app/api/documents.py backend/tests/test_documents_api.py
@@ -213,7 +213,7 @@ git commit -m "Add admin document detail API"
 - Produces: `DocumentPreview({ detail, loading, error, onClose })`
 - Consumes: existing document list and authentication token
 
-- [ ] **Step 1: Write failing preview interaction tests**
+- [x] **Step 1: Write failing preview interaction tests**
 
 Mock `api.documents` and `api.document`. Assert clicking the `工程指南` row requests its ID and shows:
 
@@ -233,7 +233,7 @@ pnpm --dir frontend test -- --run src/pages/Documents.test.tsx
 
 Expected: FAIL because rows are not interactive and there is no preview.
 
-- [ ] **Step 2: Add client types and the detail request**
+- [x] **Step 2: Add client types and the detail request**
 
 Define exact API response shapes matching Task 2 and add:
 
@@ -242,15 +242,15 @@ document: (token: string, id: string) =>
   request<DocumentDetail>(`/api/admin/documents/${id}`, {}, token)
 ```
 
-- [ ] **Step 3: Implement the accessible drawer component**
+- [x] **Step 3: Implement the accessible drawer component**
 
 Create a right-side `role="dialog"` drawer with `aria-modal="true"`, an accessible title, status, permissions, chunk count, ordered chunk cards, loading/error/empty states, close button, and Escape handling. Do not render raw HTML from document content.
 
-- [ ] **Step 4: Make document rows interactive**
+- [x] **Step 4: Make document rows interactive**
 
 Track selected ID, detail, loading, and error in `Documents.tsx`. Fetch details only after row activation. Use a real button inside each row or equivalent keyboard-safe semantics; preserve retry behavior for FAILED rows without opening the drawer accidentally.
 
-- [ ] **Step 5: Style and verify the drawer**
+- [x] **Step 5: Style and verify the drawer**
 
 Add a backdrop, fixed right panel, scrollable content, responsive full-width behavior below `800px`, and focus/hover states consistent with the current forest/paper visual system.
 
@@ -263,7 +263,7 @@ pnpm --dir frontend build
 
 Expected: focused tests and TypeScript production build pass.
 
-- [ ] **Step 6: Commit the preview UI**
+- [x] **Step 6: Commit the preview UI**
 
 ```bash
 git add frontend/src/components/DocumentPreview.tsx frontend/src/pages/Documents.tsx frontend/src/api/client.ts frontend/src/styles.css frontend/src/pages/Documents.test.tsx
@@ -283,7 +283,7 @@ git commit -m "Add admin document preview drawer"
 - Consumes: existing form `submit` handler and `sendChat`
 - Produces: Enter-to-submit, Shift+Enter newline, composition-safe Enter, and no visible label
 
-- [ ] **Step 1: Write failing keyboard interaction tests**
+- [x] **Step 1: Write failing keyboard interaction tests**
 
 Assert:
 
@@ -300,7 +300,7 @@ pnpm --dir frontend test -- --run src/pages/Chat.test.tsx
 
 Expected: FAIL because the visible label remains and Enter currently inserts a newline.
 
-- [ ] **Step 2: Implement keyboard behavior**
+- [x] **Step 2: Implement keyboard behavior**
 
 Remove the visible `<label>`, add `aria-label="问题"` to the textarea, and add `onKeyDown` logic that calls `event.currentTarget.form?.requestSubmit()` only when:
 
@@ -310,7 +310,7 @@ event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing
 
 Call `preventDefault()` only for the send path. Preserve the existing disabled and trimming behavior in `submit`.
 
-- [ ] **Step 3: Remove obsolete label styling and verify**
+- [x] **Step 3: Remove obsolete label styling and verify**
 
 Remove `.composer label` rules that no longer apply. Run all frontend tests and production build:
 
@@ -321,7 +321,7 @@ pnpm --dir frontend build
 
 Expected: all tests and build pass.
 
-- [ ] **Step 4: Commit the chat interaction**
+- [x] **Step 4: Commit the chat interaction**
 
 ```bash
 git add frontend/src/pages/Chat.tsx frontend/src/pages/Chat.test.tsx frontend/src/styles.css
@@ -340,7 +340,7 @@ git commit -m "Improve chat keyboard controls"
 - Consumes: all completed backend and frontend changes
 - Produces: verified Docker services, upgraded `local-hash-v2` chunks, working admin preview, and a cited Claude answer
 
-- [ ] **Step 1: Run complete automated verification**
+- [x] **Step 1: Run complete automated verification**
 
 ```bash
 backend/.venv/bin/pytest -q backend/tests
@@ -352,7 +352,7 @@ git diff --check
 
 Expected: all backend and frontend tests pass, frontend builds, Compose validates, and no whitespace errors are reported.
 
-- [ ] **Step 2: Rebuild and start the stack**
+- [x] **Step 2: Rebuild and start the stack**
 
 ```bash
 docker compose up -d --build
@@ -361,7 +361,7 @@ docker compose ps
 
 Expected: postgres and backend become healthy; frontend and ingest remain running.
 
-- [ ] **Step 3: Verify automatic reindexing**
+- [x] **Step 3: Verify automatic reindexing**
 
 Poll PostgreSQL until all three seeded documents are READY. Query chunk metadata and assert every chunk has:
 
@@ -371,11 +371,11 @@ Poll PostgreSQL until all three seeded documents are READY. Query chunk metadata
 
 Do not delete the existing Docker volume during this check.
 
-- [ ] **Step 4: Verify API permissions and preview data**
+- [x] **Step 4: Verify API permissions and preview data**
 
 Log in as `andy.admin`, fetch the employee handbook detail, and assert permissions and ordered chunks are present. Log in as `alice.programmer` and assert the same admin detail endpoint returns `403`.
 
-- [ ] **Step 5: Verify the real knowledge question**
+- [x] **Step 5: Verify the real knowledge question**
 
 Through `/api/chat`, ask as `andy.admin`:
 
@@ -385,7 +385,7 @@ Through `/api/chat`, ask as `andy.admin`:
 
 Assert HTTP `200`, the answer contains `10:00` and `16:00`, and citations include `员工手册` / `工作时间`.
 
-- [ ] **Step 6: Update README and commit final delivery**
+- [x] **Step 6: Update README and commit final delivery**
 
 Add one short feature bullet for admin extracted-content preview and document that old local indexes upgrade automatically on worker start.
 

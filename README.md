@@ -12,7 +12,7 @@
 - 程序员只能查询自己的薪资；`hr` 与 `admin` 可以调用受控薪资接口查询其他用户。
 - 无授权证据、低相关度证据或异常引用统一安全拒答。
 - 回答返回文档标题、页码/章节和原文片段，工具与权限事件写入审计表。
-- JWT 登录、用户所属线程隔离、管理员上传与失败重试界面。
+- JWT 登录、用户所属线程隔离、管理员上传、失败重试与提取内容预览界面。
 
 ## 快速启动
 
@@ -65,7 +65,7 @@ docker compose ps
 
 如果端口已被占用，可以在 `.env` 设置 `FRONTEND_PORT=13000` 和 `BACKEND_PORT=18000`，然后访问对应的新端口。
 
-启动过程中，backend 会自动更新数据库结构并写入演示数据；ingest worker 会使用本地 embedding 处理三份示例文档。Ingest 不需要 Anthropic Key，只有生成聊天回答时才会调用 Claude。
+启动过程中，backend 会自动更新数据库结构并写入演示数据；ingest worker 会使用本地 embedding 处理三份示例文档，并在启动时自动将旧版本地索引升级到当前版本。Ingest 不需要 Anthropic Key，只有生成聊天回答时才会调用 Claude。
 
 ## 日常 Docker 操作
 
