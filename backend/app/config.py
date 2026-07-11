@@ -9,7 +9,9 @@ class Settings(BaseSettings):
 
     app_name: str = "Internal Knowledge Agent"
     database_url: str = "postgresql+psycopg://knowledge:knowledge@postgres:5432/knowledge"
-    jwt_secret: SecretStr = SecretStr("change-me-in-production")
+    jwt_secret: SecretStr = SecretStr("demo-only-change-me-at-least-32-characters")
+    jwt_algorithm: str = "HS256"
+    access_token_minutes: int = 30
     openai_api_key: SecretStr | None = None
     chat_model: str = "gpt-4.1-mini"
     embedding_model: str = "text-embedding-3-small"
@@ -20,4 +22,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
