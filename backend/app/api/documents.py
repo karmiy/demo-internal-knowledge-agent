@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import CurrentUser, SessionDependency
 from app.config import get_settings
@@ -19,7 +20,12 @@ from app.models import (
     User,
 )
 from app.retrieval.ingest import MAX_DOCUMENT_BYTES, SUPPORTED_EXTENSIONS
-from app.schemas import DocumentResponse
+from app.schemas import (
+    DocumentChunkResponse,
+    DocumentDetailResponse,
+    DocumentPermissionResponse,
+    DocumentResponse,
+)
 
 router = APIRouter(prefix="/api/admin/documents", tags=["documents"])
 
@@ -112,6 +118,53 @@ def list_documents(
     return [_response(document) for document in documents]
 
 
+@router.get("/{document_id}", response_model=DocumentDetailResponse)
+def get_document_detail(
+    document_id: UUID, _user: AdminUser, session: SessionDependency
+) -> DocumentDetailResponse:
+    document = session.scalar(
+        select(Document)
+        .options(selectinload(Document.permissions), selectinload(Document.chunks))
+        .where(Document.id == document_id)
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    permissions = sorted(
+        document.permissions,
+        key=lambda permission: (
+            _enum_value(permission.subject_type),
+            permission.subject_id,
+        ),
+    )
+    chunks = sorted(document.chunks, key=lambda chunk: chunk.chunk_index)
+    return DocumentDetailResponse(
+        id=document.id,
+        title=document.title,
+        status=_enum_value(document.status),
+        error=document.error,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+        permissions=[
+            DocumentPermissionResponse(
+                subject_type=_enum_value(permission.subject_type),
+                subject_id=permission.subject_id,
+            )
+            for permission in permissions
+        ],
+        chunk_count=len(chunks),
+        chunks=[
+            DocumentChunkResponse(
+                chunk_index=chunk.chunk_index,
+                section=chunk.section,
+                page_number=chunk.page_number,
+                content=chunk.content,
+            )
+            for chunk in chunks
+        ],
+    )
+
+
 @router.post("/{document_id}/retry", response_model=DocumentResponse)
 def retry_document(
     document_id: UUID, _user: AdminUser, session: SessionDependency
@@ -153,14 +206,13 @@ def _parse_subjects(raw: str) -> list[tuple[SubjectType, str]]:
 
 
 def _response(document: Document) -> DocumentResponse:
-    status_value = (
-        document.status.value
-        if isinstance(document.status, DocumentStatus)
-        else str(document.status)
-    )
     return DocumentResponse(
         id=document.id,
         title=document.title,
-        status=status_value,
+        status=_enum_value(document.status),
         error=document.error,
     )
+
+
+def _enum_value(value: object) -> str:
+    return value.value if isinstance(value, (DocumentStatus, SubjectType)) else str(value)

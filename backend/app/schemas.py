@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class LoginRequest(BaseModel):
@@ -48,3 +48,23 @@ class DocumentResponse(BaseModel):
     title: str
     status: str
     error: str | None = None
+
+
+class DocumentPermissionResponse(BaseModel):
+    subject_type: str
+    subject_id: str
+
+
+class DocumentChunkResponse(BaseModel):
+    chunk_index: int
+    section: str | None
+    page_number: int | None
+    content: str
+
+
+class DocumentDetailResponse(DocumentResponse):
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+    permissions: list[DocumentPermissionResponse]
+    chunk_count: int
+    chunks: list[DocumentChunkResponse]

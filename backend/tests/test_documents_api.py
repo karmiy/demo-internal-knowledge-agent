@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -12,12 +13,13 @@ from app.main import app
 
 
 class StubSession:
-    def __init__(self) -> None:
+    def __init__(self, document: object | None = None) -> None:
         self.added: list[object] = []
         self.commits = 0
+        self.document = document
 
-    def scalar(self, _statement: object) -> None:
-        return None
+    def scalar(self, _statement: object) -> object | None:
+        return self.document
 
     def add_all(self, values: list[object]) -> None:
         self.added.extend(values)
@@ -100,3 +102,117 @@ def test_upload_rejects_unsupported_extension(tmp_path: Path) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 400
+
+
+def test_admin_can_get_document_detail() -> None:
+    document_id = uuid4()
+    timestamp = datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    document = SimpleNamespace(
+        id=document_id,
+        title="Engineering Guide",
+        status="ready",
+        error=None,
+        source_path="/private/engineering-guide.md",
+        checksum="secret-checksum",
+        created_at=timestamp,
+        updated_at=timestamp,
+        permissions=[
+            SimpleNamespace(subject_type="user", subject_id="user-2"),
+            SimpleNamespace(subject_type="role", subject_id="admin"),
+        ],
+        chunks=[
+            SimpleNamespace(
+                chunk_index=2,
+                section=None,
+                page_number=3,
+                content="Second chunk",
+                embedding=[0.2, 0.3],
+            ),
+            SimpleNamespace(
+                chunk_index=1,
+                section="Overview",
+                page_number=1,
+                content="First chunk",
+                embedding=[0.1, 0.2],
+            ),
+        ],
+    )
+    user = SimpleNamespace(id=uuid4(), role_names=frozenset({"admin"}))
+    session = StubSession(document)
+
+    def session_override() -> Generator[StubSession, None, None]:
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session] = session_override
+    try:
+        response = TestClient(app).get(f"/api/admin/documents/{document_id}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": str(document_id),
+        "title": "Engineering Guide",
+        "status": "ready",
+        "error": None,
+        "created_at": "2025-01-02T03:04:05Z",
+        "updated_at": "2025-01-02T03:04:05Z",
+        "permissions": [
+            {"subject_type": "role", "subject_id": "admin"},
+            {"subject_type": "user", "subject_id": "user-2"},
+        ],
+        "chunk_count": 2,
+        "chunks": [
+            {
+                "chunk_index": 1,
+                "section": "Overview",
+                "page_number": 1,
+                "content": "First chunk",
+            },
+            {
+                "chunk_index": 2,
+                "section": None,
+                "page_number": 3,
+                "content": "Second chunk",
+            },
+        ],
+    }
+    assert "source_path" not in response.text
+    assert "checksum" not in response.text
+    assert "embedding" not in response.text
+
+
+def test_programmer_cannot_get_document_detail() -> None:
+    user = SimpleNamespace(id=uuid4(), role_names=frozenset({"programmer"}))
+    session = StubSession()
+
+    def session_override() -> Generator[StubSession, None, None]:
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session] = session_override
+    try:
+        response = TestClient(app).get(f"/api/admin/documents/{uuid4()}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
+def test_missing_document_detail_returns_not_found() -> None:
+    user = SimpleNamespace(id=uuid4(), role_names=frozenset({"admin"}))
+    session = StubSession()
+
+    def session_override() -> Generator[StubSession, None, None]:
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session] = session_override
+    try:
+        response = TestClient(app).get(f"/api/admin/documents/{uuid4()}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document not found"}
