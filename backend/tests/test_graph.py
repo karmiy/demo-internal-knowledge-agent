@@ -71,3 +71,20 @@ def test_document_answer_contains_only_known_citations() -> None:
             "snippet": "Use the release checklist.",
         }
     ]
+
+
+def test_agent_run_is_audited_when_session_supports_writes() -> None:
+    added: list[object] = []
+    session = SimpleNamespace(add=added.append)
+    agent = KnowledgeAgent(
+        document_search=lambda *_args: [],
+        salary_lookup=lambda *_args: SalaryToolResult(
+            allowed=False, message=SAFE_DENIAL_MESSAGE
+        ),
+    )
+
+    agent.invoke(message="未知问题", actor=actor(), session=session)
+
+    assert len(added) == 1
+    assert added[0].action == "agent.run"
+    assert added[0].allowed is False

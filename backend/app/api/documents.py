@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 
 from app.auth.dependencies import CurrentUser, SessionDependency
@@ -98,9 +98,17 @@ async def upload_document(
 
 @router.get("", response_model=list[DocumentResponse])
 def list_documents(
-    _user: AdminUser, session: SessionDependency
+    _user: AdminUser,
+    session: SessionDependency,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentResponse]:
-    documents = session.scalars(select(Document).order_by(Document.created_at.desc())).all()
+    documents = session.scalars(
+        select(Document)
+        .order_by(Document.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
     return [_response(document) for document in documents]
 
 

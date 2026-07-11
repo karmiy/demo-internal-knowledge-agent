@@ -6,7 +6,7 @@
 
 **Architecture:** FastAPI owns identity, authorization, API contracts, and trusted user context. A LangGraph workflow routes questions to ACL-filtered document retrieval and/or an authorized internal-data tool, then produces grounded answers through LangChain model abstractions. PostgreSQL with pgvector stores application data, document chunks, embeddings, audit events, and graph checkpoints; React provides login, chat, citations, and admin ingestion screens.
 
-**Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16 + pgvector, LangChain 1.x, LangGraph 1.x, React 19, TypeScript, Vite, Vitest, pytest, Docker Compose.
+**Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16 + pgvector, LangChain 1.x, LangGraph 1.x, React 18, TypeScript, Vite, Vitest, pytest, Docker Compose.
 
 ## Global Constraints
 

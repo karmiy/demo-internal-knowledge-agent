@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 
+from app.audit import record_audit
 from app.graph.state import AgentState, Citation
 from app.tools.salary import SAFE_DENIAL_MESSAGE, SalaryToolResult
 
@@ -144,7 +145,18 @@ class KnowledgeAgent:
             return {"answer": SAFE_DENIAL_MESSAGE, "citations": []}
         return {}
 
-    def _audit_run(self, _state: AgentState) -> dict[str, Any]:
+    def _audit_run(self, state: AgentState) -> dict[str, Any]:
+        session = state["session"]
+        if hasattr(session, "add"):
+            record_audit(
+                session,
+                user_id=state["actor_id"],
+                action="agent.run",
+                resource_type="thread",
+                resource_id=str(state["thread_id"]),
+                allowed=state.get("answer") != SAFE_DENIAL_MESSAGE,
+                reason=state["route"],
+            )
         return {}
 
 

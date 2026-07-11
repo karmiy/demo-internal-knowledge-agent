@@ -16,6 +16,7 @@ services:
 
   backend:
     build: ./backend
+    command: ["sh", "-c", "alembic upgrade head && python -m app.seed && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     env_file:
       - path: .env
         required: false
@@ -23,7 +24,7 @@ services:
       DATABASE_URL: postgresql+psycopg://knowledge:knowledge@postgres:5432/knowledge
       DOCUMENT_ROOT: /data/documents
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - document-data:/data/documents
       - ./documents:/seed-documents:ro
@@ -39,7 +40,7 @@ services:
 
   ingest:
     build: ./backend
-    command: ["sh", "-c", "echo 'ingestion worker is introduced in Task 5'; sleep infinity"]
+    command: ["python", "-m", "app.ingestion"]
     env_file:
       - path: .env
         required: false
@@ -50,13 +51,13 @@ services:
       - document-data:/data/documents
       - ./documents:/seed-documents:ro
     depends_on:
-      postgres:
+      backend:
         condition: service_healthy
 
   frontend:
     build: ./frontend
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       backend:
         condition: service_healthy
