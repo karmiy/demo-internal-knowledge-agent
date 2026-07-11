@@ -65,7 +65,7 @@ docker compose ps
 
 如果端口已被占用，可以在 `.env` 设置 `FRONTEND_PORT=13000` 和 `BACKEND_PORT=18000`，然后访问对应的新端口。
 
-启动过程中，backend 会自动更新数据库结构并写入演示数据；ingest worker 会使用本地 embedding 处理三份示例文档，并在启动时自动将旧版本地索引升级到当前版本。Ingest 不需要 Anthropic Key，只有生成聊天回答时才会调用 Claude。
+启动过程中，backend 会自动更新数据库结构并写入演示数据；ingest worker 会使用本地 embedding 处理 12 份真实感示例文档，并在启动时自动将旧版本地索引升级到当前版本。12 份文档按 ACL 分为 6 份全员文档、3 份 Engineering 文档、2 份 HR/Admin 文档和 1 份 Admin-only 文档。Ingest 不需要 Anthropic Key，只有生成聊天回答时才会调用 Claude。
 
 ## 日常 Docker 操作
 
@@ -123,10 +123,16 @@ docker compose down -v
 
 建议验收问题：
 
-- Alice：`工程发布流程是什么？`
-- Alice：`我的薪资是多少？`
-- Alice：`helen.hr 的薪资是多少？`（应安全拒答）
-- Helen：`alice.programmer 的薪资是多少？`
+- Alice：`年假申请需要提前多久？`
+- Alice：`差旅报销应在返程后多久提交？`
+- Alice：`P1 故障需要多快响应？`
+- Alice：`生产发布需要哪些审批和验证？`
+- Helen：`薪酬复核通常在什么时候进行？`
+- Andy：`采购达到什么条件需要多家比价？`
+
+权限边界预期：Alice 可检索 6 份全员文档和 3 份 Engineering 文档，共 9 份；Helen 可检索 6 份全员文档和 2 份 HR/Admin 文档，共 8 份；Andy 可访问全部 12 份文档。
+
+薪资工具也可用 `我的薪资是多少？`、`alice.programmer 的薪资是多少？` 验收；Alice 查询 `helen.hr 的薪资是多少？` 时应安全拒答。
 
 ## 安全设计
 

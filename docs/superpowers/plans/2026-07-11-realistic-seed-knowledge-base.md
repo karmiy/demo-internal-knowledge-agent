@@ -46,7 +46,7 @@
 - Consumes: seed tuples shaped as `(title, filename, permissions)`
 - Produces: source-path-based create/update, exact permission synchronization, crash-recoverable tokenized staging, and safe PENDING requeue when title/content changes or an interrupted seed operation is recovered
 
-- [ ] **Step 1: Write failing reconciliation tests**
+- [x] **Step 1: Write failing reconciliation tests**
 
 Use a real in-memory SQLAlchemy session and temporary source/target directories. Cover these behaviors:
 
@@ -80,7 +80,7 @@ backend/.venv/bin/pytest -q backend/tests/test_seed.py
 
 Expected: FAIL on the baseline because seed identity is checksum-based, roots/specs are fixed, and no transaction-participating preparation or lock-owning orchestration interface exists.
 
-- [ ] **Step 2: Add transaction-participating preparation**
+- [x] **Step 2: Add transaction-participating preparation**
 
 Implement `_prepare_seed_documents` so production defaults remain `/seed-documents`, `get_settings().document_root`, and `DEMO_DOCUMENTS`, while tests can supply temporary paths and a one-document tuple. Return an explicit `SeedPreparation` containing per-document operation IDs, unique tokens, optional sibling staged paths, and stable targets. The helper participates in its caller's transaction and must not commit, roll back, or install targets.
 
@@ -96,7 +96,7 @@ document = session.scalar(
 
 Do not use checksum as the seed document identity.
 
-- [ ] **Step 3: Implement serialized two-transaction orchestration**
+- [x] **Step 3: Implement serialized two-transaction orchestration**
 
 Implement `reconcile_seed_documents` as the only production owner of the complete document protocol:
 
@@ -108,18 +108,18 @@ Implement `reconcile_seed_documents` as the only production owner of the complet
 
 If neither title, source checksum, nor target bytes changed, do not alter READY/PROCESSING/FAILED status or existing chunks.
 
-- [ ] **Step 4: Synchronize permissions exactly**
+- [x] **Step 4: Synchronize permissions exactly**
 
 Inside preparation, build the desired pair set. Delete existing `DocumentPermission` rows not in that set and add missing pairs. Do not modify matching rows.
 
-- [ ] **Step 5: Preserve worker and upload concurrency safety**
+- [x] **Step 5: Preserve worker and upload concurrency safety**
 
 - Ingestion and failure finalization must lock document rows and leave tokenized seed-staging markers untouched.
 - Add `Document.is_seed`; allow honest seed/upload checksum equality while enforcing upload/upload uniqueness with the partial `uq_documents_upload_checksum` index.
 - Keep the upload application pre-check, map only that PostgreSQL constraint or SQLite checksum-unique message to HTTP 409, and re-raise unrelated integrity errors after rollback/file cleanup.
 - Downgrade must preflight duplicate checksums and fail with an actionable message before attempting the older global-unique index.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 ```bash
 backend/.venv/bin/pytest -q backend/tests/test_seed.py backend/tests/test_migrations.py backend/tests/test_documents_api.py backend/tests/test_ingest.py backend/tests/test_ingestion_worker.py
@@ -155,7 +155,7 @@ Expected: focused tests and complete backend suite pass.
 - Consumes: existing Markdown parser and `local-hash-v2` ingestion
 - Produces: 6 authenticated, 3 Engineering, 2 HR/Admin, and 1 Admin-only documents
 
-- [ ] **Step 1: Write failing catalog/content tests**
+- [x] **Step 1: Write failing catalog/content tests**
 
 Add assertions that:
 
@@ -173,7 +173,7 @@ For every configured file, assert it exists, parses into 4–6 non-empty section
 
 Run the catalog tests and expect FAIL because only three files/specs exist.
 
-- [ ] **Step 2: Expand the three existing documents**
+- [x] **Step 2: Expand the three existing documents**
 
 Write 4–6 factual sections for:
 
@@ -181,11 +181,11 @@ Write 4–6 factual sections for:
 - `工程研发规范` using stable file `engineering-guide.md`;
 - `薪酬与职级制度` using stable file `hr-compensation-policy.md`, with annual review starting in March and no personal salaries.
 
-- [ ] **Step 3: Write the six authenticated documents**
+- [x] **Step 3: Write the six authenticated documents**
 
 Complete the authenticated catalog with `考勤与休假制度`, `差旅与报销制度`, `信息安全规范`, `远程办公指南`, and `新员工入职指南`. Include ordinary leave requested at least 3 working days ahead and travel expense submission within 10 working days after return.
 
-- [ ] **Step 4: Write the remaining restricted documents**
+- [x] **Step 4: Write the remaining restricted documents**
 
 Add:
 
@@ -193,7 +193,7 @@ Add:
 - HR/Admin: `绩效评估制度`;
 - Admin: `采购与供应商管理制度`, including three quotes for purchases at or above `50,000 CNY`.
 
-- [ ] **Step 5: Register exact ACL scopes**
+- [x] **Step 5: Register exact ACL scopes**
 
 Update `DEMO_DOCUMENTS` so:
 
@@ -202,7 +202,7 @@ Update `DEMO_DOCUMENTS` so:
 - HR documents use role pairs `hr` and `admin`;
 - procurement uses `(SubjectType.ROLE, "admin")`.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 ```bash
 backend/.venv/bin/pytest -q backend/tests/test_seed.py backend/tests/test_ingest.py backend/tests/test_embeddings.py
@@ -225,11 +225,11 @@ Expected: catalog/content tests and complete backend suite pass.
 - Consumes: all Task 1–2 data and seed behavior
 - Produces: a running retained-volume stack with 12 READY managed documents and user-facing test guidance
 
-- [ ] **Step 1: Update README**
+- [x] **Step 1: Update README**
 
 State that the Demo seeds 12 realistic documents and summarize the 6/3/2/1 ACL distribution. Add the six suggested questions from the design and keep the existing account/password section.
 
-- [ ] **Step 2: Run complete automated verification**
+- [x] **Step 2: Run complete automated verification**
 
 ```bash
 backend/.venv/bin/pytest -q backend/tests
@@ -241,7 +241,7 @@ git diff --check
 
 Expected: all backend/frontend tests pass, production build succeeds, and Compose/whitespace checks are clean.
 
-- [ ] **Step 3: Rebuild without deleting the existing volume**
+- [x] **Step 3: Rebuild without deleting the existing volume**
 
 ```bash
 docker compose up -d --build
@@ -250,7 +250,7 @@ docker compose ps
 
 Do not execute `docker compose down -v`. Poll until all 12 seed-managed source paths are READY.
 
-- [ ] **Step 4: Verify database identity and index state**
+- [x] **Step 4: Verify database identity and index state**
 
 Query PostgreSQL and assert:
 
@@ -259,11 +259,11 @@ Query PostgreSQL and assert:
 - all 12 are READY;
 - every chunk has `embedding_version = local-hash-v2`.
 
-- [ ] **Step 5: Verify admin frontend/API visibility and ACL counts**
+- [x] **Step 5: Verify admin frontend/API visibility and ACL counts**
 
 Log in as `andy.admin`; assert the admin list returns 12 seed documents and a newly added document detail returns 4–6 ordered chunks. Verify database ACL predicates make 9 documents accessible to Alice, 8 to Helen, and 12 to Andy. User-uploaded documents, if any, must remain untouched and are excluded from these seed counts.
 
-- [ ] **Step 6: Run four real knowledge questions**
+- [x] **Step 6: Run four real knowledge questions**
 
 Use the appropriate identities and assert answer facts plus citations:
 
@@ -274,7 +274,7 @@ Helen: 薪酬复核通常在什么时候进行？ -> 3 月 / 薪酬与职级制�
 Andy: 采购达到什么条件需要多家比价？ -> 50,000 CNY、3 家 / 采购与供应商管理制度
 ```
 
-- [ ] **Step 7: Commit and push delivery**
+- [x] **Step 7: Commit and push delivery**
 
 ```bash
 git add README.md docs/superpowers/specs/2026-07-11-realistic-seed-knowledge-base-design.md docs/superpowers/plans/2026-07-11-realistic-seed-knowledge-base.md

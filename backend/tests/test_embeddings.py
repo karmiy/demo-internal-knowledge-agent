@@ -1,8 +1,10 @@
 from math import sqrt
+from pathlib import Path
 
 import pytest
 
 from app.embeddings import LocalHashEmbeddings
+from app.retrieval.ingest import parse_document
 
 
 def dot(left: list[float], right: list[float]) -> float:
@@ -51,6 +53,38 @@ def test_seeded_document_composites_match_calibrated_distance() -> None:
     assert cosine_distance(engineering_query, engineering_chunk) <= 0.72
     assert cosine_distance(employee_query, engineering_chunk) > 0.72
     assert cosine_distance(engineering_query, employee_chunk) > 0.72
+
+
+@pytest.mark.parametrize(
+    ("question", "title", "filename", "section"),
+    [
+        (
+            "年假申请需要提前多久？",
+            "考勤与休假制度",
+            "attendance-leave-policy.md",
+            "年假与事假",
+        ),
+        (
+            "采购达到什么条件需要多家比价？",
+            "采购与供应商管理制度",
+            "procurement-vendor-policy.md",
+            "比价要求",
+        ),
+    ],
+)
+def test_acceptance_questions_retrieve_expected_seed_section(
+    question: str, title: str, filename: str, section: str
+) -> None:
+    document_path = Path(__file__).parents[2] / "documents" / filename
+    parsed_section = next(
+        item for item in parse_document(document_path) if item.section == section
+    )
+    composite = f"{title}\n{section}\n{parsed_section.content}"
+    embedder = LocalHashEmbeddings(dimensions=1536)
+
+    assert cosine_distance(
+        embedder.embed_query(question), embedder.embed_query(composite)
+    ) <= 0.72
 
 
 def test_empty_text_returns_zero_vector() -> None:
