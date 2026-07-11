@@ -1,0 +1,27 @@
+.message.user {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  margin-left: 0;
+}
+
+.message.user > span {
+  flex: 0 0 4rem;
+  text-align: right;
+}
+
+.message.user > div {
+  width: fit-content;
+  max-width: min(46rem, calc(100% - 5rem));
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 800px) {
+  .message.user > span {
+    flex-basis: 3rem;
+  }
+
+  .message.user > div {
+    max-width: calc(100% - 4rem);
+  }
+}

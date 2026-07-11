@@ -30,7 +30,7 @@
 - Consumes: existing `.message.user > span` and `.message.user > div` DOM contract from `Chat`
 - Produces: right-anchored user rows without changing component markup or state
 
-- [ ] **Step 1: Record the failing desktop layout**
+- [x] **Step 1: Record the failing desktop layout**
 
 In the running app at desktop width, read the conversation, user-row, user-bubble, and Agent-answer bounding boxes. Confirm the current failure:
 
@@ -40,11 +40,11 @@ user bubble is not anchored to the conversation's right side
 YOU appears before the bubble on the left
 ```
 
-- [ ] **Step 2: Record the failing mobile layout contract**
+- [x] **Step 2: Record the failing mobile layout contract**
 
 At a viewport width below `800px`, confirm the existing mobile rule resets both message roles to `3rem minmax(0, 1fr)`, so the user label remains on the left.
 
-- [ ] **Step 3: Add the minimal desktop alignment override**
+- [x] **Step 3: Add the minimal desktop alignment override**
 
 Create `frontend/src/chat-layout.css`:
 
@@ -68,7 +68,7 @@ Create `frontend/src/chat-layout.css`:
 }
 ```
 
-- [ ] **Step 4: Add the mobile width override**
+- [x] **Step 4: Add the mobile width override**
 
 Append:
 
@@ -84,7 +84,7 @@ Append:
 }
 ```
 
-- [ ] **Step 5: Load the focused stylesheet last**
+- [x] **Step 5: Load the focused stylesheet last**
 
 In `frontend/src/main.tsx`, import the new stylesheet after `styles.css` and `markdown.css`:
 
@@ -94,7 +94,7 @@ import "./markdown.css";
 import "./chat-layout.css";
 ```
 
-- [ ] **Step 6: Run automated regression checks**
+- [x] **Step 6: Run automated regression checks**
 
 ```bash
 pnpm --dir frontend test -- --run
@@ -104,7 +104,7 @@ git diff --check
 
 Expected: all frontend tests pass, TypeScript/Vite build succeeds, and no whitespace errors are reported.
 
-- [ ] **Step 7: Commit the implementation**
+- [x] **Step 7: Commit the implementation**
 
 ```bash
 git add frontend/src/chat-layout.css frontend/src/main.tsx docs/superpowers/plans/2026-07-12-user-message-alignment.md
