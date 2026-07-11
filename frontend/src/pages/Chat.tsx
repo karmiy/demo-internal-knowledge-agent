@@ -28,7 +28,7 @@ export function Chat({ token, sendChat = api.chat }: { token: string; sendChat?:
         {busy && <div className="thinking" role="status"><i /><i /><i /> 正在检索授权证据</div>}
         {error && <p className="form-error" role="alert">{error}</p>}
       </section>
-      <form className="composer" onSubmit={submit}><label htmlFor="question">问题</label><textarea id="question" rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="输入关于内部制度、工程流程或本人数据的问题…" /><button disabled={busy || !question.trim()} aria-label="发送">↗</button><small>回答仅依据当前身份可访问的信息</small></form>
+      <form className="composer" onSubmit={submit}><textarea id="question" aria-label="问题" rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder="输入关于内部制度、工程流程或本人数据的问题…" /><button disabled={busy || !question.trim()} aria-label="发送">↗</button><small>回答仅依据当前身份可访问的信息</small></form>
     </div>
   );
 }
