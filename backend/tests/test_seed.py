@@ -27,17 +27,77 @@ from app.seed import _prepare_seed_documents
 
 
 DOCUMENTS_ROOT = Path(__file__).resolve().parents[2] / "documents"
-ACCEPTANCE_FACTS = (
-    "10:00",
-    "16:00",
-    "3 个工作日",
-    "10 个工作日",
-    "10 分钟",
-    "30 分钟",
-    "3 月",
-    "50,000 CNY",
-    "3 家供应商",
+STABLE_DEMO_FILENAMES = {
+    "employee-handbook.md",
+    "engineering-guide.md",
+    "hr-compensation-policy.md",
+}
+EXPECTED_DOCUMENT_FACTS = (
+    (
+        "employee-handbook.md",
+        ("核心协作时间为工作日 10:00–16:00",),
+    ),
+    (
+        "attendance-leave-policy.md",
+        ("普通年假或事假须至少提前 3 个工作日",),
+    ),
+    (
+        "travel-expense-policy.md",
+        (
+            "行程优先选择经济舱和公共交通",
+            "必须在返程后 10 个工作日内提交",
+        ),
+    ),
+    (
+        "incident-response-oncall.md",
+        (
+            "P1 告警需在 10 分钟内响应",
+            "P1 故障期间至少每 30 分钟同步一次进展",
+        ),
+    ),
+    (
+        "hr-compensation-policy.md",
+        ("年度薪酬复核于每年 3 月启动",),
+    ),
+    (
+        "procurement-vendor-policy.md",
+        (
+            "采购金额达到或超过 50,000 CNY",
+            "至少 3 家供应商",
+        ),
+    ),
+    (
+        "release-change-management.md",
+        (
+            "生产发布至少需代码所有者（code owner）批准",
+            "必须验证服务健康检查",
+        ),
+    ),
 )
+EXPECTED_DOCUMENT_PERMISSIONS = {
+    "employee-handbook.md": ((SubjectType.AUTHENTICATED, "*"),),
+    "attendance-leave-policy.md": ((SubjectType.AUTHENTICATED, "*"),),
+    "travel-expense-policy.md": ((SubjectType.AUTHENTICATED, "*"),),
+    "information-security-policy.md": ((SubjectType.AUTHENTICATED, "*"),),
+    "remote-work-guide.md": ((SubjectType.AUTHENTICATED, "*"),),
+    "onboarding-guide.md": ((SubjectType.AUTHENTICATED, "*"),),
+    "engineering-guide.md": ((SubjectType.DEPARTMENT, "engineering"),),
+    "release-change-management.md": (
+        (SubjectType.DEPARTMENT, "engineering"),
+    ),
+    "incident-response-oncall.md": (
+        (SubjectType.DEPARTMENT, "engineering"),
+    ),
+    "hr-compensation-policy.md": (
+        (SubjectType.ROLE, "hr"),
+        (SubjectType.ROLE, "admin"),
+    ),
+    "performance-review-policy.md": (
+        (SubjectType.ROLE, "hr"),
+        (SubjectType.ROLE, "admin"),
+    ),
+    "procurement-vendor-policy.md": ((SubjectType.ROLE, "admin"),),
+}
 
 
 @pytest.fixture
@@ -718,15 +778,24 @@ def test_seed_retains_matching_permission_row(
 def test_demo_document_catalog_has_expected_acl_distribution() -> None:
     permission_counts: Counter[str] = Counter()
 
-    for _title, _filename, permissions in seed_module.DEMO_DOCUMENTS:
+    filenames = {
+        filename for _title, filename, _permissions in seed_module.DEMO_DOCUMENTS
+    }
+    assert filenames == set(EXPECTED_DOCUMENT_PERMISSIONS)
+
+    for _title, filename, permissions in seed_module.DEMO_DOCUMENTS:
+        assert len(permissions) == len(set(permissions)), (
+            f"Duplicate demo document permissions: {permissions}"
+        )
+        assert permissions == EXPECTED_DOCUMENT_PERMISSIONS[filename]
         if permissions == ((SubjectType.AUTHENTICATED, "*"),):
             permission_counts["authenticated"] += 1
         elif permissions == ((SubjectType.DEPARTMENT, "engineering"),):
             permission_counts["engineering"] += 1
-        elif set(permissions) == {
+        elif permissions == (
             (SubjectType.ROLE, "hr"),
             (SubjectType.ROLE, "admin"),
-        }:
+        ):
             permission_counts["hr_admin"] += 1
         elif permissions == ((SubjectType.ROLE, "admin"),):
             permission_counts["admin"] += 1
@@ -749,6 +818,7 @@ def test_demo_document_files_are_unique_and_have_substantive_sections() -> None:
     ]
 
     assert len(filenames) == len(set(filenames))
+    assert STABLE_DEMO_FILENAMES <= set(filenames)
     for filename in filenames:
         path = DOCUMENTS_ROOT / filename
         assert path.is_file(), f"Missing demo document: {filename}"
@@ -756,14 +826,26 @@ def test_demo_document_files_are_unique_and_have_substantive_sections() -> None:
         assert 4 <= len(sections) <= 6, (
             f"{filename} must parse into 4–6 non-empty sections, got {len(sections)}"
         )
-        assert all(section.content.strip() for section in sections)
+        for section in sections:
+            content = section.content.strip()
+            chinese_characters = sum(
+                "\u4e00" <= character <= "\u9fff" for character in content
+            )
+            assert len(content) >= 50, (
+                f"{filename} section {section.section!r} is too short"
+            )
+            assert chinese_characters >= 20, (
+                f"{filename} section {section.section!r} lacks Chinese content"
+            )
 
 
-def test_demo_document_corpus_contains_acceptance_facts() -> None:
-    corpus = "\n".join(
-        (DOCUMENTS_ROOT / filename).read_text(encoding="utf-8")
-        for _title, filename, _permissions in seed_module.DEMO_DOCUMENTS
+@pytest.mark.parametrize(("filename", "expected_facts"), EXPECTED_DOCUMENT_FACTS)
+def test_demo_document_contains_its_expected_facts(
+    filename: str, expected_facts: tuple[str, ...]
+) -> None:
+    parsed_content = "\n".join(
+        section.content for section in parse_document(DOCUMENTS_ROOT / filename)
     )
 
-    for fact in ACCEPTANCE_FACTS:
-        assert fact in corpus, f"Missing acceptance fact: {fact}"
+    for fact in expected_facts:
+        assert fact in parsed_content, f"Missing fact in {filename}: {fact}"
