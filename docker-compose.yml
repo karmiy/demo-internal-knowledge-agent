@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: docker.m.daocloud.io/pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: knowledge
       POSTGRES_USER: knowledge
@@ -26,6 +26,7 @@ services:
       - "8000:8000"
     volumes:
       - document-data:/data/documents
+      - ./documents:/seed-documents:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +48,7 @@ services:
       DOCUMENT_ROOT: /data/documents
     volumes:
       - document-data:/data/documents
+      - ./documents:/seed-documents:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,4 +64,3 @@ services:
 volumes:
   postgres-data:
   document-data:
-
