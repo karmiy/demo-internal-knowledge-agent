@@ -73,6 +73,29 @@ def test_document_answer_contains_only_known_citations() -> None:
     ]
 
 
+def test_unrelated_document_above_configured_cutoff_uses_safe_denial() -> None:
+    unrelated_chunk = SimpleNamespace(
+        evidence_id="doc:unrelated",
+        document_title="Employee Handbook",
+        source_locator="Leave Policy",
+        snippet="Annual leave is unrelated to deployment procedures.",
+        content="Annual leave is unrelated to deployment procedures.",
+        distance=0.720001,
+    )
+    agent = KnowledgeAgent(
+        document_search=lambda *_args: [unrelated_chunk],
+        salary_lookup=lambda *_args: SalaryToolResult(
+            allowed=False, message=SAFE_DENIAL_MESSAGE
+        ),
+        max_distance=0.72,
+    )
+
+    result = agent.invoke(message="发布流程是什么？", actor=actor(), session=object())
+
+    assert result["answer"] == SAFE_DENIAL_MESSAGE
+    assert result["citations"] == []
+
+
 def test_agent_run_is_audited_when_session_supports_writes() -> None:
     added: list[object] = []
     session = SimpleNamespace(add=added.append)

@@ -2,8 +2,10 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
 
-from app.models import Document, DocumentChunk, DocumentStatus
+from app.models import Base, Document, DocumentChunk, DocumentStatus
 from app.retrieval.ingest import (
     DocumentParseError,
     ParsedSection,
@@ -149,6 +151,51 @@ def test_ingest_flushes_replaced_chunks_before_inserting_same_indexes(
     ingest_document(document.id, session, FakeEmbedder())
 
     assert session.events == ["flush", "delete", "flush", "add_all", "flush"]
+
+
+def test_ingest_replaces_same_index_chunks_in_a_database_session(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "guide.md"
+    path.write_text("# Deploy\nUse the release checklist.", encoding="utf-8")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    document = Document(
+        id=uuid4(),
+        title="Guide",
+        source_path=str(path),
+        checksum="d" * 64,
+        created_by=uuid4(),
+        status=DocumentStatus.READY,
+        chunks=[
+            DocumentChunk(
+                content="Old content",
+                page_number=None,
+                section="Deploy",
+                chunk_index=0,
+                chunk_metadata={"embedding_version": "local-hash-v1"},
+                embedding=[0.0, 0.0],
+            )
+        ],
+    )
+
+    try:
+        with Session(engine) as session:
+            session.add(document)
+            session.commit()
+
+            ingest_document(document.id, session, FakeEmbedder())
+            session.commit()
+
+            chunks = session.scalars(
+                select(DocumentChunk).where(DocumentChunk.document_id == document.id)
+            ).all()
+            assert [(chunk.chunk_index, chunk.content) for chunk in chunks] == [
+                (0, "Use the release checklist.")
+            ]
+            assert document.status is DocumentStatus.READY
+    finally:
+        engine.dispose()
 
 
 def test_ingest_sanitizes_failure_and_marks_failed(tmp_path: Path) -> None:

@@ -90,7 +90,7 @@ export function DocumentPreview({ detail, loading, error, onClose }: DocumentPre
             </section>
 
             {detail.chunks.length === 0 ? (
-              <p className="preview-state">暂无可预览的提取内容。</p>
+              <p className="preview-state">文档尚未完成处理</p>
             ) : (
               <ol className="chunk-list">
                 {detail.chunks.map((chunk) => (

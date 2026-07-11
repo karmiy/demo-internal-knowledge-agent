@@ -109,7 +109,7 @@ it("shows an empty state when no extracted chunks are available", async () => {
   render(<Documents token="token" />);
   await user.click(await screen.findByRole("button", { name: /工程指南/ }));
 
-  expect(await screen.findByText("暂无可预览的提取内容。")).toBeVisible();
+  expect(await screen.findByText("文档尚未完成处理")).toBeVisible();
 });
 
 it("retries a failed document without opening or fetching its preview", async () => {

@@ -17,9 +17,14 @@ class StubSession:
         self.added: list[object] = []
         self.commits = 0
         self.document = document
+        self.scalar_bind_values: list[object] = []
 
-    def scalar(self, _statement: object) -> object | None:
-        return self.document
+    def scalar(self, statement: object) -> object | None:
+        bind_values = list(statement.compile().params.values())  # type: ignore[attr-defined]
+        self.scalar_bind_values.extend(bind_values)
+        if self.document is None:
+            return None
+        return self.document if self.document.id in bind_values else None
 
     def add_all(self, values: list[object]) -> None:
         self.added.extend(values)
@@ -181,6 +186,7 @@ def test_admin_can_get_document_detail() -> None:
     assert "source_path" not in response.text
     assert "checksum" not in response.text
     assert "embedding" not in response.text
+    assert session.scalar_bind_values == [document_id]
 
 
 def test_programmer_cannot_get_document_detail() -> None:
