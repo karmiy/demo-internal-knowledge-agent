@@ -31,7 +31,7 @@
 - Produces: a conversation element ref and mutable follow flag internal to `Chat`
 - Consumes: existing `messages`, `busy`, and `error` render state
 
-- [ ] **Step 1: Add failing scroll-behavior tests**
+- [x] **Step 1: Add failing scroll-behavior tests**
 
 Add a test helper that defines writable `scrollTop` and configurable `scrollHeight`/`clientHeight` properties on `.conversation`. Use deferred `sendChat` promises to control busy and assistant updates.
 
@@ -54,7 +54,7 @@ pnpm --dir frontend exec vitest run src/pages/Chat.test.tsx
 
 Expected: FAIL because the conversation currently has no ref, scroll listener, or layout effect.
 
-- [ ] **Step 2: Add the bottom-distance helper and refs**
+- [x] **Step 2: Add the bottom-distance helper and refs**
 
 In `Chat.tsx`, import `useLayoutEffect` and `useRef`, then add:
 
@@ -68,7 +68,7 @@ export function isNearBottom(element: HTMLElement) {
 
 Inside `Chat`, initialize `conversationRef` and `shouldFollowRef` with following enabled.
 
-- [ ] **Step 3: Wire scroll tracking and post-render following**
+- [x] **Step 3: Wire scroll tracking and post-render following**
 
 Attach `ref={conversationRef}` and `onScroll` to `.conversation`. The handler updates only `shouldFollowRef.current` from `isNearBottom(event.currentTarget)`.
 
@@ -80,7 +80,7 @@ element.scrollTop = element.scrollHeight;
 
 Do not use `scrollIntoView`, `requestAnimationFrame`, timers, or smooth behavior.
 
-- [ ] **Step 4: Run focused RED/GREEN verification**
+- [x] **Step 4: Run focused RED/GREEN verification**
 
 ```bash
 pnpm --dir frontend exec vitest run src/pages/Chat.test.tsx
@@ -88,7 +88,7 @@ pnpm --dir frontend exec vitest run src/pages/Chat.test.tsx
 
 Expected: all Chat tests pass, including exact `48px` boundary and pause/resume cases.
 
-- [ ] **Step 5: Run full frontend and production verification**
+- [x] **Step 5: Run full frontend and production verification**
 
 ```bash
 pnpm --dir frontend test -- --run
