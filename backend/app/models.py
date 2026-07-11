@@ -40,6 +40,12 @@ class DocumentStatus(str, Enum):
 SEED_FILE_STAGING_ERROR = "seed_file_staging"
 
 
+def is_seed_file_staging_error(error: str | None) -> bool:
+    return error == SEED_FILE_STAGING_ERROR or bool(
+        error and error.startswith(f"{SEED_FILE_STAGING_ERROR}:")
+    )
+
+
 class SubjectType(str, Enum):
     AUTHENTICATED = "authenticated"
     USER = "user"

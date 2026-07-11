@@ -21,7 +21,7 @@ from app.models import (
     SubjectType,
     User,
 )
-from app.seed import _seed_documents
+from app.seed import _prepare_seed_documents
 
 
 @pytest.fixture
@@ -76,6 +76,124 @@ def test_seed_lookup_compiles_postgresql_row_lock(tmp_path: Path) -> None:
     assert "FOR UPDATE" in sql
 
 
+def test_live_reconciler_lock_blocks_second_protocol(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "guide.md").write_bytes(b"locked")
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    with seed_module._seed_reconciliation_lock(target_root, timeout_seconds=0):
+        with pytest.raises(seed_module.SeedReconciliationBusy):
+            seed_module.reconcile_seed_documents(
+                admin.id,
+                session_factory=factory,
+                seed_root=seed_root,
+                target_root=target_root,
+                document_specs=(
+                    (
+                        "Guide",
+                        "guide.md",
+                        ((SubjectType.AUTHENTICATED, "*"),),
+                    ),
+                ),
+                reconciliation_lock_timeout=0,
+            )
+
+    assert session.scalar(select(Document)) is None
+    assert not (target_root / "guide.md").exists()
+
+
+def test_wrong_staging_token_cannot_finalize_or_replace(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "guide.md").write_bytes(b"token protected")
+    preparation = seed_module._prepare_seed_documents(
+        session,
+        admin,
+        seed_root=seed_root,
+        target_root=target_root,
+        document_specs=(
+            (
+                "Guide",
+                "guide.md",
+                ((SubjectType.AUTHENTICATED, "*"),),
+            ),
+        ),
+    )
+    session.commit()
+    operation = preparation.operations[0]
+    document = session.get(Document, operation.document_id)
+    assert document is not None
+    document.error = f"{seed_module.SEED_FILE_STAGING_ERROR}:different-token"
+    session.commit()
+
+    with pytest.raises(seed_module.SeedOperationLost, match="token"):
+        seed_module._finalize_seed_preparation(session, preparation)
+
+    session.rollback()
+    assert not operation.target.exists()
+    assert operation.staged is not None and operation.staged.exists()
+    preparation.cleanup()
+
+
+def test_seed_preparation_uses_unique_token_per_document(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "one.md").write_bytes(b"one")
+    (seed_root / "two.md").write_bytes(b"two")
+
+    preparation = _prepare_seed_documents(
+        session,
+        admin,
+        seed_root=seed_root,
+        target_root=target_root,
+        document_specs=(
+            ("One", "one.md", ((SubjectType.AUTHENTICATED, "*"),)),
+            ("Two", "two.md", ((SubjectType.AUTHENTICATED, "*"),)),
+        ),
+    )
+
+    tokens = [operation.token for operation in preparation.operations]
+    assert len(tokens) == 2
+    assert len(set(tokens)) == 2
+    markers = set(session.scalars(select(Document.error)).all())
+    assert markers == {
+        f"{seed_module.SEED_FILE_STAGING_ERROR}:{token}" for token in tokens
+    }
+    session.rollback()
+    preparation.cleanup()
+
+
+def test_seed_busy_retry_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = 0
+    sleeps: list[float] = []
+
+    def always_busy(*_args, **_kwargs) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise seed_module.SeedDocumentBusy("worker still owns document")
+
+    monkeypatch.setattr(seed_module, "reconcile_seed_documents", always_busy)
+    monkeypatch.setattr(seed_module.time, "sleep", sleeps.append)
+
+    with pytest.raises(seed_module.SeedDocumentBusy, match="after 3 attempts"):
+        seed_module._reconcile_seed_documents_with_retry(
+            uuid4(), max_attempts=3, retry_delay=0.01
+        )
+
+    assert attempts == 3
+    assert sleeps == [0.01, 0.01]
+
+
 def test_seed_helper_does_not_commit_caller_transaction(
     session: Session, admin: User, tmp_path: Path
 ) -> None:
@@ -84,7 +202,7 @@ def test_seed_helper_does_not_commit_caller_transaction(
     seed_root.mkdir()
     (seed_root / "guide.md").write_bytes(b"uncommitted")
 
-    preparation = _seed_documents(
+    preparation = _prepare_seed_documents(
         session,
         admin,
         seed_root=seed_root,
@@ -142,9 +260,12 @@ def test_seed_is_unclaimable_until_file_is_installed(
         ),
     )
 
-    assert observed == [
-        (DocumentStatus.PROCESSING, seed_module.SEED_FILE_STAGING_ERROR)
-    ]
+    assert len(observed) == 1
+    assert observed[0][0] is DocumentStatus.PROCESSING
+    assert observed[0][1] is not None
+    assert observed[0][1].startswith(
+        f"{seed_module.SEED_FILE_STAGING_ERROR}:"
+    )
     session.expire_all()
     document = session.scalar(select(Document))
     assert document is not None
@@ -366,7 +487,8 @@ def test_atomic_replace_failure_leaves_pending_and_retries(
     assert stored is not None
     assert stored.checksum == expected_checksum
     assert stored.status is DocumentStatus.PROCESSING
-    assert stored.error == seed_module.SEED_FILE_STAGING_ERROR
+    assert stored.error is not None
+    assert stored.error.startswith(f"{seed_module.SEED_FILE_STAGING_ERROR}:")
     assert (target_root / "guide.md").read_bytes() == b"old bytes"
     assert not list(target_root.glob(".guide.md.*.tmp"))
 
@@ -379,7 +501,10 @@ def test_atomic_replace_failure_leaves_pending_and_retries(
 
 
 def test_finalization_failure_recovers_after_file_was_installed(
-    session: Session, admin: User, tmp_path: Path
+    session: Session,
+    admin: User,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seed_root = tmp_path / "seed"
     target_root = tmp_path / "documents"
@@ -419,8 +544,23 @@ def test_finalization_failure_recovers_after_file_was_installed(
     document = session.scalar(select(Document))
     assert document is not None
     assert document.status is DocumentStatus.PROCESSING
-    assert document.error == seed_module.SEED_FILE_STAGING_ERROR
+    assert document.error is not None
+    assert document.error.startswith(f"{seed_module.SEED_FILE_STAGING_ERROR}:")
+    crashed_token = document.error
     assert (target_root / "guide.md").read_bytes() == b"installed before finalization"
+
+    real_finalize = seed_module._finalize_seed_preparation
+    takeover_tokens: list[str] = []
+
+    def observe_takeover(session: Session, preparation) -> None:
+        takeover_tokens.extend(
+            operation.token for operation in preparation.operations
+        )
+        real_finalize(session, preparation)
+
+    monkeypatch.setattr(
+        seed_module, "_finalize_seed_preparation", observe_takeover
+    )
 
     seed_module.reconcile_seed_documents(
         admin.id,
@@ -437,6 +577,8 @@ def test_finalization_failure_recovers_after_file_was_installed(
     )
 
     session.expire_all()
+    assert takeover_tokens
+    assert all(token not in crashed_token for token in takeover_tokens)
     assert document.status is DocumentStatus.PENDING
     assert document.error is None
 

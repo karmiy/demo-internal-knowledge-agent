@@ -2,12 +2,15 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
+import sqlite3
 from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.api import documents as documents_api
 from app.api.documents import get_document_root
 from app.auth.dependencies import get_current_user
 from app.db import get_session
@@ -165,7 +168,13 @@ def test_admin_upload_can_match_seed_checksum(tmp_path: Path) -> None:
 def test_admin_upload_integrity_race_returns_conflict(tmp_path: Path) -> None:
     user = SimpleNamespace(id=uuid4(), role_names=frozenset({"admin"}))
     session = StubSession(
-        commit_error=IntegrityError("INSERT documents", {}, Exception("unique"))
+        commit_error=IntegrityError(
+            "INSERT documents",
+            {},
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: documents.checksum"
+            ),
+        )
     )
 
     def session_override() -> Generator[StubSession, None, None]:
@@ -190,6 +199,61 @@ def test_admin_upload_integrity_race_returns_conflict(tmp_path: Path) -> None:
     assert response.json() == {"detail": "Document already exists"}
     assert session.rollbacks == 1
     assert list(tmp_path.iterdir()) == []
+
+
+def test_admin_upload_unrelated_integrity_error_is_reraised(tmp_path: Path) -> None:
+    user = SimpleNamespace(id=uuid4(), role_names=frozenset({"admin"}))
+    integrity_error = IntegrityError(
+        "INSERT documents",
+        {},
+        sqlite3.IntegrityError(
+            "UNIQUE constraint failed: documents.source_path"
+        ),
+    )
+    session = StubSession(commit_error=integrity_error)
+
+    def session_override() -> Generator[StubSession, None, None]:
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[get_document_root] = lambda: tmp_path
+    try:
+        with pytest.raises(IntegrityError) as raised:
+            TestClient(app).post(
+                "/api/admin/documents",
+                files={"file": ("guide.md", b"# Unrelated")},
+                data={
+                    "title": "Guide",
+                    "subjects": '[{"type":"authenticated","id":null}]',
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert raised.value is integrity_error
+    assert session.rollbacks == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_upload_conflict_recognizes_postgresql_constraint() -> None:
+    postgres_origin = Exception("duplicate key")
+    postgres_origin.diag = SimpleNamespace(  # type: ignore[attr-defined]
+        constraint_name="uq_documents_upload_checksum"
+    )
+    integrity_error = IntegrityError("INSERT documents", {}, postgres_origin)
+
+    assert documents_api._is_upload_checksum_conflict(integrity_error) is True
+
+
+def test_upload_conflict_rejects_unrelated_postgresql_constraint() -> None:
+    postgres_origin = Exception("duplicate key")
+    postgres_origin.diag = SimpleNamespace(  # type: ignore[attr-defined]
+        constraint_name="documents_source_path_key"
+    )
+    integrity_error = IntegrityError("INSERT documents", {}, postgres_origin)
+
+    assert documents_api._is_upload_checksum_conflict(integrity_error) is False
 
 
 def test_upload_rejects_unsupported_extension(tmp_path: Path) -> None:

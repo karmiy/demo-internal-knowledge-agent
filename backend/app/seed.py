@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import os
 import tempfile
+import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pwdlib import PasswordHash
 from sqlalchemy import select
@@ -27,6 +30,7 @@ from app.models import (
     User,
     UserRole,
     SEED_FILE_STAGING_ERROR,
+    is_seed_file_staging_error,
 )
 
 DEMO_PASSWORD = "demo-password"
@@ -58,14 +62,63 @@ class SeedDocumentBusy(RuntimeError):
     """A worker currently owns a seed document row."""
 
 
+class SeedReconciliationBusy(RuntimeError):
+    """Another live process owns the seed reconciliation protocol."""
+
+
+class SeedOperationLost(RuntimeError):
+    """A seed operation no longer owns its document staging marker."""
+
+
+@dataclass(frozen=True)
+class SeedDocumentOperation:
+    document_id: UUID
+    token: str
+    staged: Path | None
+    target: Path
+
+
 @dataclass(frozen=True)
 class SeedPreparation:
-    document_ids: tuple[UUID, ...]
-    replacements: tuple[tuple[Path, Path], ...]
+    operations: tuple[SeedDocumentOperation, ...]
 
     def cleanup(self) -> None:
-        for staged, _target in self.replacements:
-            staged.unlink(missing_ok=True)
+        for operation in self.operations:
+            if operation.staged is not None:
+                operation.staged.unlink(missing_ok=True)
+
+
+def _seed_staging_marker(token: str) -> str:
+    return f"{SEED_FILE_STAGING_ERROR}:{token}"
+
+
+@contextmanager
+def _seed_reconciliation_lock(
+    target_root: Path,
+    *,
+    timeout_seconds: float = 5.0,
+    poll_seconds: float = 0.05,
+):
+    """Serialize this local-volume demo on Linux/macOS using advisory flock."""
+    target_root.mkdir(parents=True, exist_ok=True)
+    lock_path = target_root / ".seed-reconciliation.lock"
+    deadline = time.monotonic() + timeout_seconds
+    with lock_path.open("a+b") as lock_file:
+        while True:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise SeedReconciliationBusy(
+                        f"seed reconciliation lock is busy: {lock_path}"
+                    ) from exc
+                time.sleep(min(poll_seconds, remaining))
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _get_or_create_department(session: Session, name: str) -> Department:
@@ -130,7 +183,7 @@ def _seed_document_for_update_statement(target: Path):
     )
 
 
-def _seed_documents(
+def _prepare_seed_documents(
     session: Session,
     admin: User | UUID,
     *,
@@ -149,8 +202,8 @@ def _seed_documents(
     )
     document_specs = DEMO_DOCUMENTS if document_specs is None else document_specs
     target_root.mkdir(parents=True, exist_ok=True)
-    staged_targets: list[tuple[Path, Path]] = []
-    staged_document_ids: list[UUID] = []
+    operations: list[SeedDocumentOperation] = []
+    unassigned_staged: Path | None = None
     admin_id = admin.id if isinstance(admin, User) else admin
 
     try:
@@ -170,7 +223,7 @@ def _seed_documents(
             if (
                 document is not None
                 and document.status is DocumentStatus.PROCESSING
-                and document.error != SEED_FILE_STAGING_ERROR
+                and not is_seed_file_staging_error(document.error)
                 and (metadata_changed or file_changed)
             ):
                 raise SeedDocumentBusy(f"seed document is being processed: {target}")
@@ -178,12 +231,13 @@ def _seed_documents(
             recovering_staged_document = (
                 document is not None
                 and document.status is DocumentStatus.PROCESSING
-                and document.error == SEED_FILE_STAGING_ERROR
+                and is_seed_file_staging_error(document.error)
             )
             requires_staging = (
                 metadata_changed or file_changed or recovering_staged_document
             )
 
+            staged: Path | None = None
             if file_changed:
                 descriptor, staged_name = tempfile.mkstemp(
                     dir=target.parent,
@@ -197,7 +251,11 @@ def _seed_documents(
                 except Exception:
                     staged.unlink(missing_ok=True)
                     raise
-                staged_targets.append((staged, target))
+                unassigned_staged = staged
+
+            token = uuid4().hex if requires_staging else None
+            if requires_staging:
+                assert token is not None
 
             if document is None:
                 document = Document(
@@ -207,7 +265,7 @@ def _seed_documents(
                     created_by=admin_id,
                     is_seed=True,
                     status=DocumentStatus.PROCESSING,
-                    error=SEED_FILE_STAGING_ERROR,
+                    error=_seed_staging_marker(token),
                 )
                 session.add(document)
                 session.flush()
@@ -217,10 +275,18 @@ def _seed_documents(
                 document.is_seed = True
                 if requires_staging:
                     document.status = DocumentStatus.PROCESSING
-                    document.error = SEED_FILE_STAGING_ERROR
+                    document.error = _seed_staging_marker(token)
 
             if requires_staging:
-                staged_document_ids.append(document.id)
+                operations.append(
+                    SeedDocumentOperation(
+                        document_id=document.id,
+                        token=token,
+                        staged=staged,
+                        target=target,
+                    )
+                )
+                unassigned_staged = None
 
             desired = set(permissions)
             existing = {
@@ -240,42 +306,43 @@ def _seed_documents(
                         )
                     )
 
-        return SeedPreparation(
-            document_ids=tuple(staged_document_ids),
-            replacements=tuple(staged_targets),
-        )
+        return SeedPreparation(operations=tuple(operations))
     except Exception:
-        for staged, _target in staged_targets:
-            staged.unlink(missing_ok=True)
+        SeedPreparation(operations=tuple(operations)).cleanup()
+        if unassigned_staged is not None:
+            unassigned_staged.unlink(missing_ok=True)
         raise
 
 
-def _install_seed_files(preparation: SeedPreparation) -> None:
-    try:
-        for staged, target in preparation.replacements:
-            os.replace(staged, target)
-    except Exception:
-        preparation.cleanup()
-        raise
-
-
-def _finalize_seed_documents(
-    session: Session, document_ids: tuple[UUID, ...]
+def _finalize_seed_preparation(
+    session: Session, preparation: SeedPreparation
 ) -> None:
-    if not document_ids:
+    if not preparation.operations:
         return
-    documents = session.scalars(
-        select(Document)
-        .where(Document.id.in_(document_ids))
-        .with_for_update()
-    ).all()
-    for document in documents:
+    documents: dict[UUID, Document] = {}
+    for operation in preparation.operations:
+        document = session.scalar(
+            select(Document)
+            .where(Document.id == operation.document_id)
+            .with_for_update()
+        )
+        expected_marker = _seed_staging_marker(operation.token)
         if (
-            document.status is DocumentStatus.PROCESSING
-            and document.error == SEED_FILE_STAGING_ERROR
+            document is None
+            or document.status is not DocumentStatus.PROCESSING
+            or document.error != expected_marker
         ):
-            document.status = DocumentStatus.PENDING
-            document.error = None
+            raise SeedOperationLost(
+                f"seed staging token no longer owns document {operation.document_id}"
+            )
+        documents[operation.document_id] = document
+
+    for operation in preparation.operations:
+        if operation.staged is not None:
+            os.replace(operation.staged, operation.target)
+        document = documents[operation.document_id]
+        document.status = DocumentStatus.PENDING
+        document.error = None
 
 
 def reconcile_seed_documents(
@@ -288,41 +355,68 @@ def reconcile_seed_documents(
         tuple[str, str, tuple[tuple[SubjectType, str], ...]], ...
     ]
     | None = None,
+    reconciliation_lock_timeout: float = 5.0,
 ) -> None:
-    preparation: SeedPreparation | None = None
-    with session_factory() as session:
-        try:
-            preparation = _seed_documents(
-                session,
-                admin_id,
-                seed_root=seed_root,
-                target_root=target_root,
-                document_specs=document_specs,
-            )
-            session.commit()
-        except Exception:
-            if preparation is not None:
+    resolved_target_root = (
+        Path(get_settings().document_root)
+        if target_root is None
+        else Path(target_root)
+    )
+    with _seed_reconciliation_lock(
+        resolved_target_root,
+        timeout_seconds=reconciliation_lock_timeout,
+    ):
+        preparation: SeedPreparation | None = None
+        with session_factory() as session:
+            try:
+                preparation = _prepare_seed_documents(
+                    session,
+                    admin_id,
+                    seed_root=seed_root,
+                    target_root=resolved_target_root,
+                    document_specs=document_specs,
+                )
+                session.commit()
+            except Exception:
+                if preparation is not None:
+                    preparation.cleanup()
+                session.rollback()
+                raise
+
+        assert preparation is not None
+        with session_factory() as session:
+            try:
+                _finalize_seed_preparation(session, preparation)
+                session.commit()
+            except Exception:
                 preparation.cleanup()
-            session.rollback()
-            raise
+                session.rollback()
+                raise
 
-    assert preparation is not None
-    _install_seed_files(preparation)
 
-    with session_factory() as session:
+def _reconcile_seed_documents_with_retry(
+    admin_id: UUID,
+    *,
+    max_attempts: int = 3,
+    retry_delay: float = 0.5,
+) -> None:
+    for attempt in range(1, max_attempts + 1):
         try:
-            _finalize_seed_documents(session, preparation.document_ids)
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
+            reconcile_seed_documents(admin_id)
+            return
+        except SeedDocumentBusy as exc:
+            if attempt == max_attempts:
+                raise SeedDocumentBusy(
+                    f"seed documents remained worker-owned after {max_attempts} attempts"
+                ) from exc
+            time.sleep(retry_delay)
 
 
 def seed() -> None:
     with SessionLocal.begin() as session:
         users = _seed_users(session)
         admin_id = users["andy.admin"].id
-    reconcile_seed_documents(admin_id)
+    _reconcile_seed_documents_with_retry(admin_id)
 
 
 if __name__ == "__main__":

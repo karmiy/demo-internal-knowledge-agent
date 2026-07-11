@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.embeddings import LocalHashEmbeddings, build_local_embedder
 from app.models import (
-    SEED_FILE_STAGING_ERROR,
     Document,
     DocumentChunk,
     DocumentStatus,
+    is_seed_file_staging_error,
 )
 from app.retrieval.ingest import INDEX_VERSION, ingest_document
 
@@ -68,7 +68,7 @@ def mark_document_failed(session: Session, document_id: UUID) -> bool:
     )
     if document is None or (
         document.status is DocumentStatus.PROCESSING
-        and document.error == SEED_FILE_STAGING_ERROR
+        and is_seed_file_staging_error(document.error)
     ):
         session.commit()
         return False

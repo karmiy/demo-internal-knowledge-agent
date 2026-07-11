@@ -110,7 +110,11 @@ async def upload_document(
     except IntegrityError as exc:
         session.rollback()
         destination.unlink(missing_ok=True)
-        raise HTTPException(status_code=409, detail="Document already exists") from exc
+        if _is_upload_checksum_conflict(exc):
+            raise HTTPException(
+                status_code=409, detail="Document already exists"
+            ) from exc
+        raise
     return _response(document)
 
 
@@ -228,3 +232,13 @@ def _response(document: Document) -> DocumentResponse:
 
 def _enum_value(value: object) -> str:
     return value.value if isinstance(value, (DocumentStatus, SubjectType)) else str(value)
+
+
+def _is_upload_checksum_conflict(exc: IntegrityError) -> bool:
+    diagnostic = getattr(exc.orig, "diag", None)
+    if (
+        getattr(diagnostic, "constraint_name", None)
+        == "uq_documents_upload_checksum"
+    ):
+        return True
+    return "unique constraint failed: documents.checksum" in str(exc.orig).lower()

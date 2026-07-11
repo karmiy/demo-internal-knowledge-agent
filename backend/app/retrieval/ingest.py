@@ -11,10 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
-    SEED_FILE_STAGING_ERROR,
     Document,
     DocumentChunk,
     DocumentStatus,
+    is_seed_file_staging_error,
 )
 
 SUPPORTED_EXTENSIONS = frozenset({".pdf", ".docx", ".md", ".txt"})
@@ -188,7 +188,7 @@ def ingest_document(
         raise LookupError("document_not_found")
     if (
         document.status is DocumentStatus.PROCESSING
-        and document.error == SEED_FILE_STAGING_ERROR
+        and is_seed_file_staging_error(document.error)
     ):
         return
 
