@@ -13,6 +13,7 @@ function isDocumentDetail(detail: DocumentDetail | DocumentItem): detail is Docu
 }
 
 export function DocumentPreview({ detail, loading, error, onClose }: DocumentPreviewProps) {
+  const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = `document-preview-${detail.id}`;
 
@@ -21,17 +22,44 @@ export function DocumentPreview({ detail, loading, error, onClose }: DocumentPre
     closeButtonRef.current?.focus();
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
+      if (event.key !== "Tab") return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      ));
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) {
+        event.preventDefault();
+        return;
+      }
+
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    function handleFocusIn(event: FocusEvent) {
+      const dialog = dialogRef.current;
+      if (dialog && !dialog.contains(event.target as Node)) closeButtonRef.current?.focus();
     }
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", handleFocusIn);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", handleFocusIn);
       previousFocus?.focus();
     };
   }, [onClose]);
 
   return (
     <div className="preview-backdrop">
-      <aside className="document-preview" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <aside ref={dialogRef} className="document-preview" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <header className="preview-header">
           <div>
             <p className="micro-label">EXTRACTED CONTENT / READ ONLY</p>
@@ -42,7 +70,7 @@ export function DocumentPreview({ detail, loading, error, onClose }: DocumentPre
           </button>
         </header>
 
-        {loading && <p className="preview-state">正在读取提取内容…</p>}
+        {loading && <p className="preview-state" role="status">正在读取提取内容…</p>}
         {!loading && error && <p className="preview-state preview-error" role="alert">{error}</p>}
         {!loading && !error && isDocumentDetail(detail) && (
           <div className="preview-content">

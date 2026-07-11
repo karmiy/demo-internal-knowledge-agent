@@ -38,9 +38,11 @@ function mockDocumentList() {
 
 it("shows ingestion status returned by the admin API", async () => {
   mockDocumentList();
+  const detailRequest = vi.spyOn(api, "document");
   render(<Documents token="token" />);
   expect(await screen.findByText("工程指南")).toBeVisible();
   expect(screen.getByText("ready")).toBeVisible();
+  expect(detailRequest).not.toHaveBeenCalled();
 });
 
 it("opens an accessible preview with permissions and extracted chunks", async () => {
@@ -61,6 +63,10 @@ it("opens an accessible preview with permissions and extracted chunks", async ()
 
   const closeButton = screen.getByRole("button", { name: "关闭文档预览" });
   expect(closeButton).toHaveFocus();
+  await user.tab();
+  expect(closeButton).toHaveFocus();
+  await user.tab({ shift: true });
+  expect(closeButton).toHaveFocus();
   await user.click(closeButton);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(openButton).toHaveFocus();
@@ -75,7 +81,7 @@ it("shows a loading state while the preview request is pending", async () => {
   await user.click(await screen.findByRole("button", { name: /工程指南/ }));
 
   expect(screen.getByRole("dialog", { name: "工程指南" })).toBeVisible();
-  expect(screen.getByText("正在读取提取内容…")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("正在读取提取内容…");
 });
 
 it("shows a detail request error and closes with Escape", async () => {
@@ -104,4 +110,23 @@ it("shows an empty state when no extracted chunks are available", async () => {
   await user.click(await screen.findByRole("button", { name: /工程指南/ }));
 
   expect(await screen.findByText("暂无可预览的提取内容。")).toBeVisible();
+});
+
+it("retries a failed document without opening or fetching its preview", async () => {
+  const user = userEvent.setup();
+  const failedDocument = { ...documentItem, status: "failed", error: "解析失败" };
+  vi.spyOn(api, "documents").mockResolvedValue([failedDocument]);
+  const detailRequest = vi.spyOn(api, "document");
+  const retryRequest = vi.spyOn(api, "retryDocument").mockResolvedValue({
+    ...failedDocument,
+    status: "pending",
+    error: null,
+  });
+
+  render(<Documents token="token" />);
+  await user.click(await screen.findByRole("button", { name: "重试" }));
+
+  expect(retryRequest).toHaveBeenCalledWith("token", "12345678-abcd");
+  expect(detailRequest).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
