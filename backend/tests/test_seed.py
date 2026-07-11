@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Iterator
 import hashlib
 import os
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app import seed as seed_module
 from app.ingestion.worker import claim_pending_document
+from app.retrieval.ingest import parse_document
 from app.models import (
     Base,
     Document,
@@ -22,6 +24,20 @@ from app.models import (
     User,
 )
 from app.seed import _prepare_seed_documents
+
+
+DOCUMENTS_ROOT = Path(__file__).resolve().parents[2] / "documents"
+ACCEPTANCE_FACTS = (
+    "10:00",
+    "16:00",
+    "3 个工作日",
+    "10 个工作日",
+    "10 分钟",
+    "30 分钟",
+    "3 月",
+    "50,000 CNY",
+    "3 家供应商",
+)
 
 
 @pytest.fixture
@@ -697,3 +713,57 @@ def test_seed_retains_matching_permission_row(
     permission = session.scalar(select(DocumentPermission))
     assert permission is not None
     assert permission.id == permission_id
+
+
+def test_demo_document_catalog_has_expected_acl_distribution() -> None:
+    permission_counts: Counter[str] = Counter()
+
+    for _title, _filename, permissions in seed_module.DEMO_DOCUMENTS:
+        if permissions == ((SubjectType.AUTHENTICATED, "*"),):
+            permission_counts["authenticated"] += 1
+        elif permissions == ((SubjectType.DEPARTMENT, "engineering"),):
+            permission_counts["engineering"] += 1
+        elif set(permissions) == {
+            (SubjectType.ROLE, "hr"),
+            (SubjectType.ROLE, "admin"),
+        }:
+            permission_counts["hr_admin"] += 1
+        elif permissions == ((SubjectType.ROLE, "admin"),):
+            permission_counts["admin"] += 1
+        else:
+            pytest.fail(f"Unexpected demo document permissions: {permissions}")
+
+    assert len(seed_module.DEMO_DOCUMENTS) == 12
+    assert permission_counts == {
+        "authenticated": 6,
+        "engineering": 3,
+        "hr_admin": 2,
+        "admin": 1,
+    }
+
+
+def test_demo_document_files_are_unique_and_have_substantive_sections() -> None:
+    filenames = [
+        filename
+        for _title, filename, _permissions in seed_module.DEMO_DOCUMENTS
+    ]
+
+    assert len(filenames) == len(set(filenames))
+    for filename in filenames:
+        path = DOCUMENTS_ROOT / filename
+        assert path.is_file(), f"Missing demo document: {filename}"
+        sections = parse_document(path)
+        assert 4 <= len(sections) <= 6, (
+            f"{filename} must parse into 4–6 non-empty sections, got {len(sections)}"
+        )
+        assert all(section.content.strip() for section in sections)
+
+
+def test_demo_document_corpus_contains_acceptance_facts() -> None:
+    corpus = "\n".join(
+        (DOCUMENTS_ROOT / filename).read_text(encoding="utf-8")
+        for _title, filename, _permissions in seed_module.DEMO_DOCUMENTS
+    )
+
+    for fact in ACCEPTANCE_FACTS:
+        assert fact in corpus, f"Missing acceptance fact: {fact}"

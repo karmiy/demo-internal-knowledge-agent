@@ -46,14 +46,59 @@ DEMO_DOCUMENTS = (
         ((SubjectType.AUTHENTICATED, "*"),),
     ),
     (
-        "工程团队指南",
+        "考勤与休假制度",
+        "attendance-leave-policy.md",
+        ((SubjectType.AUTHENTICATED, "*"),),
+    ),
+    (
+        "差旅与报销制度",
+        "travel-expense-policy.md",
+        ((SubjectType.AUTHENTICATED, "*"),),
+    ),
+    (
+        "信息安全规范",
+        "information-security-policy.md",
+        ((SubjectType.AUTHENTICATED, "*"),),
+    ),
+    (
+        "远程办公指南",
+        "remote-work-guide.md",
+        ((SubjectType.AUTHENTICATED, "*"),),
+    ),
+    (
+        "新员工入职指南",
+        "onboarding-guide.md",
+        ((SubjectType.AUTHENTICATED, "*"),),
+    ),
+    (
+        "工程研发规范",
         "engineering-guide.md",
         ((SubjectType.DEPARTMENT, "engineering"),),
     ),
     (
-        "HR 薪酬制度",
+        "发布与变更管理",
+        "release-change-management.md",
+        ((SubjectType.DEPARTMENT, "engineering"),),
+    ),
+    (
+        "故障响应与值班手册",
+        "incident-response-oncall.md",
+        ((SubjectType.DEPARTMENT, "engineering"),),
+    ),
+    (
+        "薪酬与职级制度",
         "hr-compensation-policy.md",
         ((SubjectType.ROLE, "hr"), (SubjectType.ROLE, "admin")),
+    ),
+    (
+        "绩效评估制度",
+        "performance-review-policy.md",
+        ((SubjectType.ROLE, "hr"), (SubjectType.ROLE, "admin")),
+    ),
+    (
+        "采购与供应商管理制度",
+        "procurement-vendor-policy.md",
+        ((SubjectType.ROLE, "admin"),),
     ),
 )
 
