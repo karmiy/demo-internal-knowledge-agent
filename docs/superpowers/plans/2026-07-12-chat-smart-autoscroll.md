@@ -98,7 +98,7 @@ git diff --check
 
 Expected: all frontend tests pass, TypeScript/Vite build succeeds, and diff check is clean.
 
-- [ ] **Step 6: Commit, rebuild, and perform browser acceptance**
+- [x] **Step 6: Commit, rebuild, and perform browser acceptance**
 
 ```bash
 git add frontend/src/pages/Chat.tsx frontend/src/pages/Chat.test.tsx docs/superpowers/plans/2026-07-12-chat-smart-autoscroll.md
