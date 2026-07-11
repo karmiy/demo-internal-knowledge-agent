@@ -61,7 +61,11 @@ def test_rejects_unsupported_file_type(tmp_path: Path) -> None:
 
 
 class FakeEmbedder:
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.texts = texts
         return [[float(index), 0.5] for index, _text in enumerate(texts)]
 
 
@@ -97,12 +101,18 @@ def test_ingest_transitions_document_to_ready(tmp_path: Path) -> None:
         status=DocumentStatus.PENDING,
     )
     session = FakeSession(document)
+    embedder = FakeEmbedder()
 
-    ingest_document(document.id, session, FakeEmbedder())
+    ingest_document(document.id, session, embedder)
 
     assert document.status is DocumentStatus.READY
     assert document.error is None
+    assert embedder.texts == ["Guide\nDeploy\nUse the release checklist."]
     assert len(session.added) == 1
+    assert session.added[0].chunk_metadata == {
+        "source_path": "guide.md",
+        "embedding_version": "local-hash-v2",
+    }
     assert session.flush_count >= 2
 
 

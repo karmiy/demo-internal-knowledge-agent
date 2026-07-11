@@ -4,17 +4,39 @@ import time
 from collections.abc import Callable
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select, update
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.embeddings import LocalHashEmbeddings, build_local_embedder
-from app.models import Document, DocumentStatus
-from app.retrieval.ingest import ingest_document
+from app.models import Document, DocumentChunk, DocumentStatus
+from app.retrieval.ingest import INDEX_VERSION, ingest_document
 
 
 def build_embedder() -> LocalHashEmbeddings:
     return build_local_embedder()
+
+
+def mark_stale_documents_pending(session: Session) -> int:
+    current_chunk_exists = (
+        exists()
+        .where(
+            DocumentChunk.document_id == Document.id,
+            DocumentChunk.chunk_metadata["embedding_version"].as_string()
+            == INDEX_VERSION,
+        )
+        .correlate(Document)
+    )
+    result = session.execute(
+        update(Document)
+        .where(
+            Document.status == DocumentStatus.READY,
+            ~current_chunk_exists,
+        )
+        .values(status=DocumentStatus.PENDING)
+    )
+    session.commit()
+    return result.rowcount  # type: ignore[attr-defined, no-any-return]
 
 
 def claim_pending_document(session: Session) -> UUID | None:
@@ -41,6 +63,8 @@ def run_worker(
     embedder: object | None = None,
 ) -> None:
     active_embedder = embedder or build_embedder()
+    with session_factory() as startup_session:
+        mark_stale_documents_pending(startup_session)
     while True:
         with session_factory() as claim_session:
             document_id = claim_pending_document(claim_session)

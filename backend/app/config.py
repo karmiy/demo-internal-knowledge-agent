@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     chat_model: str = "claude-sonnet-4-6"
     chat_max_tokens: int = 2048
     embedding_dimensions: int = 1536
+    retrieval_max_distance: float = 0.72
     document_root: str = "/data/documents"
 
 

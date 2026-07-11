@@ -13,6 +13,7 @@ from app.models import Document, DocumentChunk, DocumentStatus
 
 SUPPORTED_EXTENSIONS = frozenset({".pdf", ".docx", ".md", ".txt"})
 MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
+INDEX_VERSION = "local-hash-v2"
 
 
 class DocumentParseError(ValueError):
@@ -32,6 +33,14 @@ class ChunkDraft:
     page_number: int | None
     section: str | None
     chunk_index: int
+
+
+def build_embedding_text(title: str, draft: ChunkDraft) -> str:
+    return "\n".join(
+        value
+        for value in (title.strip(), (draft.section or "").strip(), draft.content)
+        if value
+    )
 
 
 def parse_document(path: Path | str) -> list[ParsedSection]:
@@ -177,7 +186,7 @@ def ingest_document(
     session.flush()
     try:
         drafts = chunk_sections(parse_document(document.source_path))
-        texts = [draft.content for draft in drafts]
+        texts = [build_embedding_text(document.title, draft) for draft in drafts]
         embeddings = embedder.embed_documents(texts)  # type: ignore[attr-defined]
         if len(embeddings) != len(drafts):
             raise RuntimeError("embedding_count_mismatch")
@@ -189,7 +198,10 @@ def ingest_document(
                 page_number=draft.page_number,
                 section=draft.section,
                 chunk_index=draft.chunk_index,
-                chunk_metadata={"source_path": Path(document.source_path).name},
+                chunk_metadata={
+                    "source_path": Path(document.source_path).name,
+                    "embedding_version": INDEX_VERSION,
+                },
                 embedding=embedding,
             )
             for draft, embedding in zip(drafts, embeddings, strict=True)

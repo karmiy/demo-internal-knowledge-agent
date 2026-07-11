@@ -35,6 +35,7 @@ class RuntimeServices:
         if not api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is not configured")
         self.embedder = build_local_embedder()
+        self.max_distance = settings.retrieval_max_distance
         self.model = ChatAnthropic(
             model=settings.chat_model,
             api_key=api_key,
@@ -84,6 +85,7 @@ def get_agent_runner() -> AgentRunner:
             ),
             salary_lookup=get_salary,
             composer=services.compose,
+            max_distance=services.max_distance,
         )
         return agent.invoke(
             message=message, actor=actor, session=session, thread_id=thread_id
