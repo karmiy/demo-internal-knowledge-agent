@@ -29,13 +29,13 @@
 
 ### Engineering 部门可见
 
-7. **工程研发规范**（`engineering-development-standards.md`）：分支策略、代码评审、自动化测试、依赖管理及技术文档。
+7. **工程研发规范**（`engineering-guide.md`）：分支策略、代码评审、自动化测试、依赖管理及技术文档。沿用现有 seed 文件名以保证数据卷原地升级。
 8. **发布与变更管理**（`release-change-management.md`）：变更分级、发布窗口、审批、上线验证、回滚及复盘。
 9. **故障响应与值班手册**（`incident-response-oncall.md`）：P1/P2/P3 分级、响应时限、升级路径、沟通频率及事后复盘。
 
 ### HR 与 Admin 可见
 
-10. **薪酬与职级制度**（`compensation-career-levels.md`）：职级框架、薪酬构成、年度复核、调薪触发条件及保密要求；不包含个人工资明细。
+10. **薪酬与职级制度**（`hr-compensation-policy.md`）：职级框架、薪酬构成、年度复核、调薪触发条件及保密要求；不包含个人工资明细。沿用现有 seed 文件名以保证数据卷原地升级。
 11. **绩效评估制度**（`performance-review-policy.md`）：目标设定、季度回顾、年度评估、评级校准、申诉及绩效改进计划。
 
 ### Admin 可见
