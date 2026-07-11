@@ -245,7 +245,7 @@ git push origin main
 - Consumes: production frontend build from Tasks 1–2
 - Produces: running Docker stack with browser-verified Markdown output
 
-- [ ] **Step 1: Rebuild and restart the stack**
+- [x] **Step 1: Rebuild and restart the stack**
 
 Run:
 
@@ -255,7 +255,7 @@ docker compose up -d --build
 
 Expected: frontend, backend, ingest, and Postgres services are running; backend and Postgres are healthy.
 
-- [ ] **Step 2: Perform browser acceptance**
+- [x] **Step 2: Perform browser acceptance**
 
 Using `andy.admin`, submit a knowledge question that returns bold text and a list. Verify:
 
@@ -267,7 +267,7 @@ citation cards remain below the answer
 the conversation remains pinned to the bottom while follow mode is active
 ```
 
-- [ ] **Step 3: Run final verification**
+- [x] **Step 3: Run final verification**
 
 ```bash
 pnpm --dir frontend test -- --run
@@ -280,6 +280,6 @@ git diff --check
 
 Expected: 0 test failures, successful build, healthy services, backend `{"status":"ok"}`, frontend HTTP 200, and no whitespace errors.
 
-- [ ] **Step 4: Record plan completion**
+- [x] **Step 4: Record plan completion**
 
 Mark all plan checkboxes complete, commit the plan-only change, and push `main`.
