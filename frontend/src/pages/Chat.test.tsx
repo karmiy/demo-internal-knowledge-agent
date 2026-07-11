@@ -90,6 +90,23 @@ it("renders citations returned by chat", async () => {
   expect(screen.getByText("发布流程", { selector: "span" })).toBeVisible();
 });
 
+it("renders only Agent messages as Markdown", async () => {
+  const send = vi.fn().mockResolvedValue({
+    ...chatResult,
+    answer: "**Agent 重点**",
+  });
+  const { container } = render(<Chat token="token" sendChat={send} />);
+
+  fireEvent.change(screen.getByRole("textbox", { name: "问题" }), {
+    target: { value: "**用户原文**" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+  expect(await screen.findByText("Agent 重点")).toHaveProperty("tagName", "STRONG");
+  expect(screen.getByText("**用户原文**")).toBeVisible();
+  expect(container.querySelector(".message.user strong")).not.toBeInTheDocument();
+});
+
 it("follows new assistant content when the conversation is at the bottom", async () => {
   const pending = deferred<typeof chatResult>();
   const send = vi.fn().mockReturnValue(pending.promise);

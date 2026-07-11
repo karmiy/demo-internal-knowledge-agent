@@ -134,13 +134,14 @@ Expected: 3 tests pass with no warnings.
 **Files:**
 - Modify: `frontend/src/pages/Chat.tsx`
 - Modify: `frontend/src/pages/Chat.test.tsx`
-- Modify: `frontend/src/styles.css`
+- Create: `frontend/src/markdown.css`
+- Modify: `frontend/src/main.tsx`
 
 **Interfaces:**
 - Consumes: `MarkdownMessage({ content })` from Task 1
 - Produces: assistant-only Markdown rendering inside the existing `.message.assistant` body
 
-- [ ] **Step 1: Write a failing Chat integration test**
+- [x] **Step 1: Write a failing Chat integration test**
 
 Add a test that submits literal Markdown from the user and returns Markdown from the Agent:
 
@@ -163,7 +164,7 @@ it("renders only Agent messages as Markdown", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the Chat test to verify RED**
+- [x] **Step 2: Run the Chat test to verify RED**
 
 Run:
 
@@ -173,7 +174,7 @@ pnpm --dir frontend exec vitest run src/pages/Chat.test.tsx
 
 Expected: FAIL because the assistant text is still rendered by a plain `<p>`.
 
-- [ ] **Step 3: Select the renderer by message role**
+- [x] **Step 3: Select the renderer by message role**
 
 Import `MarkdownMessage` in `Chat.tsx` and replace the shared message paragraph with:
 
@@ -187,9 +188,9 @@ Import `MarkdownMessage` in `Chat.tsx` and replace the shared message paragraph 
 
 Leave `Citations` and `.activity` after this role-specific content block.
 
-- [ ] **Step 4: Add scoped Markdown typography**
+- [x] **Step 4: Add scoped Markdown typography**
 
-Add `.markdown-message` rules to `frontend/src/styles.css` for:
+Add `.markdown-message` rules to `frontend/src/markdown.css` and import it after `styles.css` in `frontend/src/main.tsx`:
 
 ```css
 .markdown-message{line-height:1.8;overflow-wrap:anywhere}
@@ -212,7 +213,7 @@ Add `.markdown-message` rules to `frontend/src/styles.css` for:
 
 Remove or narrow `.message>div>p` only as needed so the existing user paragraph retains `margin:0`, `line-height:1.8`, and `white-space:pre-wrap`.
 
-- [ ] **Step 5: Run focused and full frontend verification**
+- [x] **Step 5: Run focused and full frontend verification**
 
 Run:
 
@@ -225,10 +226,10 @@ git diff --check
 
 Expected: all tests pass, TypeScript/Vite production build succeeds, and the diff has no whitespace errors.
 
-- [ ] **Step 6: Commit the implementation**
+- [x] **Step 6: Commit the implementation**
 
 ```bash
-git add frontend/package.json frontend/pnpm-lock.yaml frontend/src/components/MarkdownMessage.tsx frontend/src/components/MarkdownMessage.test.tsx frontend/src/pages/Chat.tsx frontend/src/pages/Chat.test.tsx frontend/src/styles.css docs/superpowers/plans/2026-07-12-agent-markdown-rendering.md
+git add frontend/src/pages/Chat.tsx frontend/src/pages/Chat.test.tsx frontend/src/markdown.css frontend/src/main.tsx docs/superpowers/plans/2026-07-12-agent-markdown-rendering.md
 git commit -m "Render Agent replies as safe Markdown"
 git push origin main
 ```

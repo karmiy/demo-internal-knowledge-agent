@@ -1,0 +1,105 @@
+.markdown-message {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.markdown-message > :first-child {
+  margin-top: 0;
+}
+
+.markdown-message > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-message p {
+  margin: 0.65rem 0;
+}
+
+.markdown-message h1,
+.markdown-message h2,
+.markdown-message h3 {
+  margin: 1.25rem 0 0.6rem;
+  font-family: var(--serif);
+  line-height: 1.25;
+}
+
+.markdown-message h1 {
+  font-size: 1.5rem;
+}
+
+.markdown-message h2 {
+  font-size: 1.25rem;
+}
+
+.markdown-message h3 {
+  font-size: 1.05rem;
+}
+
+.markdown-message ul,
+.markdown-message ol {
+  margin: 0.7rem 0;
+  padding-left: 1.5rem;
+}
+
+.markdown-message li + li {
+  margin-top: 0.35rem;
+}
+
+.markdown-message blockquote {
+  margin: 1rem 0;
+  padding: 0.7rem 1rem;
+  border-left: 3px solid var(--mint);
+  background: rgba(168, 230, 193, 0.1);
+  color: #495451;
+}
+
+.markdown-message hr {
+  margin: 1.25rem 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.markdown-message a {
+  color: var(--forest);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.markdown-message code {
+  padding: 0.12rem 0.3rem;
+  background: rgba(20, 34, 31, 0.08);
+  font: 0.86em var(--mono);
+}
+
+.markdown-message pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem;
+  background: var(--ink);
+  color: var(--paper-2);
+}
+
+.markdown-message pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.markdown-message table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown-message th,
+.markdown-message td {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.markdown-message th {
+  background: rgba(168, 230, 193, 0.14);
+  font-weight: 600;
+}
