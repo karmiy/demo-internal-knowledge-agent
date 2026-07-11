@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.models import Document, DocumentStatus
+from app.models import Document, DocumentChunk, DocumentStatus
 from app.retrieval.ingest import (
     DocumentParseError,
     ParsedSection,
@@ -75,17 +75,21 @@ class FakeSession:
         self.added: list[object] = []
         self.deleted: list[object] = []
         self.flush_count = 0
+        self.events: list[str] = []
 
     def get(self, _model: object, document_id: object) -> Document | None:
         return self.document if document_id == self.document.id else None
 
     def add_all(self, values: list[object]) -> None:
+        self.events.append("add_all")
         self.added.extend(values)
 
     def delete(self, value: object) -> None:
+        self.events.append("delete")
         self.deleted.append(value)
 
     def flush(self) -> None:
+        self.events.append("flush")
         self.flush_count += 1
 
 
@@ -114,6 +118,37 @@ def test_ingest_transitions_document_to_ready(tmp_path: Path) -> None:
         "embedding_version": "local-hash-v2",
     }
     assert session.flush_count >= 2
+
+
+def test_ingest_flushes_replaced_chunks_before_inserting_same_indexes(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "guide.md"
+    path.write_text("# Deploy\nUse the release checklist.", encoding="utf-8")
+    document = Document(
+        id=uuid4(),
+        title="Guide",
+        source_path=str(path),
+        checksum="c" * 64,
+        created_by=uuid4(),
+        status=DocumentStatus.READY,
+    )
+    document.chunks = [
+        DocumentChunk(
+            document_id=document.id,
+            content="Old content",
+            page_number=None,
+            section="Deploy",
+            chunk_index=0,
+            chunk_metadata={"embedding_version": "local-hash-v1"},
+            embedding=[0.0, 0.0],
+        )
+    ]
+    session = FakeSession(document)
+
+    ingest_document(document.id, session, FakeEmbedder())
+
+    assert session.events == ["flush", "delete", "flush", "add_all", "flush"]
 
 
 def test_ingest_sanitizes_failure_and_marks_failed(tmp_path: Path) -> None:

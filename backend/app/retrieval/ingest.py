@@ -206,8 +206,11 @@ def ingest_document(
             )
             for draft, embedding in zip(drafts, embeddings, strict=True)
         ]
-        for old_chunk in list(document.chunks):
+        old_chunks = list(document.chunks)
+        for old_chunk in old_chunks:
             session.delete(old_chunk)
+        if old_chunks:
+            session.flush()
         session.add_all(new_chunks)
         document.status = DocumentStatus.READY
         document.error = None
