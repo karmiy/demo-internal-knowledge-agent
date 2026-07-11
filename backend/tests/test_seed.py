@@ -182,6 +182,180 @@ def test_live_reconciler_lock_blocks_second_protocol(
     assert not (target_root / "guide.md").exists()
 
 
+def test_missing_source_fails_before_any_document_or_target_mutation(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "one.md").write_bytes(b"old bytes")
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    specs = (
+        ("One", "one.md", ((SubjectType.AUTHENTICATED, "*"),)),
+        ("Two", "two.md", ((SubjectType.AUTHENTICATED, "*"),)),
+    )
+
+    seed_module.reconcile_seed_documents(
+        admin.id,
+        session_factory=factory,
+        seed_root=seed_root,
+        target_root=target_root,
+        document_specs=(specs[0],),
+    )
+    document = session.scalar(select(Document))
+    assert document is not None
+    document.status = DocumentStatus.READY
+    session.commit()
+    original_checksum = document.checksum
+    (seed_root / "one.md").write_bytes(b"new bytes")
+
+    with pytest.raises(RuntimeError, match=r"two\.md"):
+        seed_module.reconcile_seed_documents(
+            admin.id,
+            session_factory=factory,
+            seed_root=seed_root,
+            target_root=target_root,
+            document_specs=specs,
+        )
+
+    session.expire_all()
+    stored = session.scalar(select(Document))
+    assert stored is not None
+    assert stored.checksum == original_checksum
+    assert stored.status is DocumentStatus.READY
+    assert (target_root / "one.md").read_bytes() == b"old bytes"
+    assert not list(target_root.glob(".*.seed-*.tmp"))
+
+
+def test_source_preflight_reports_every_missing_or_nonregular_file(
+    session: Session,
+    admin: User,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    (seed_root / "directory.md").mkdir()
+    unreadable = seed_root / "unreadable.md"
+    unreadable.write_bytes(b"cannot read")
+    real_read_bytes = Path.read_bytes
+
+    def read_bytes(path: Path) -> bytes:
+        if path == unreadable:
+            raise PermissionError("permission denied")
+        return real_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    with pytest.raises(RuntimeError) as raised:
+        seed_module.reconcile_seed_documents(
+            admin.id,
+            session_factory=factory,
+            seed_root=seed_root,
+            target_root=target_root,
+            document_specs=(
+                ("Missing", "missing.md", ((SubjectType.AUTHENTICATED, "*"),)),
+                (
+                    "Directory",
+                    "directory.md",
+                    ((SubjectType.AUTHENTICATED, "*"),),
+                ),
+                (
+                    "Unreadable",
+                    "unreadable.md",
+                    ((SubjectType.AUTHENTICATED, "*"),),
+                ),
+            ),
+        )
+
+    message = str(raised.value)
+    assert "missing.md" in message
+    assert "directory.md" in message
+    assert "unreadable.md" in message
+    assert session.scalar(select(Document)) is None
+    assert not list(target_root.glob(".*.seed-*.tmp"))
+
+
+def test_missing_source_does_not_ignore_previously_staged_document(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    target_root.mkdir()
+    target = target_root / "guide.md"
+    target.write_bytes(b"installed bytes")
+    document = Document(
+        title="Guide",
+        source_path=str(target),
+        checksum=hashlib.sha256(b"installed bytes").hexdigest(),
+        created_by=admin.id,
+        is_seed=True,
+        status=DocumentStatus.PROCESSING,
+        error=f"{seed_module.SEED_FILE_STAGING_ERROR}:abandoned-token",
+    )
+    session.add(document)
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    with pytest.raises(RuntimeError, match=r"guide\.md"):
+        seed_module.reconcile_seed_documents(
+            admin.id,
+            session_factory=factory,
+            seed_root=seed_root,
+            target_root=target_root,
+            document_specs=(
+                ("Guide", "guide.md", ((SubjectType.AUTHENTICATED, "*"),)),
+            ),
+        )
+
+    session.expire_all()
+    assert document.status is DocumentStatus.PROCESSING
+    assert document.error == (
+        f"{seed_module.SEED_FILE_STAGING_ERROR}:abandoned-token"
+    )
+    assert target.read_bytes() == b"installed bytes"
+
+
+def test_reconciliation_reclaims_only_owned_temp_pattern_for_configured_targets(
+    session: Session, admin: User, tmp_path: Path
+) -> None:
+    seed_root = tmp_path / "seed"
+    target_root = tmp_path / "documents"
+    seed_root.mkdir()
+    target_root.mkdir()
+    (seed_root / "guide.md").write_bytes(b"guide")
+    abandoned = target_root / f".guide.md.seed-{'a' * 32}.tmp"
+    abandoned.write_bytes(b"abandoned")
+    legacy_abandoned = target_root / ".guide.md.deadbeef.tmp"
+    legacy_abandoned.write_bytes(b"abandoned by the previous naming scheme")
+    user_file = target_root / ".guide.md.notes.tmp"
+    user_file.write_bytes(b"keep")
+    near_match = target_root / f".guide.md.seed-{'b' * 31}.tmp"
+    near_match.write_bytes(b"keep")
+    unconfigured = target_root / f".other.md.seed-{'c' * 32}.tmp"
+    unconfigured.write_bytes(b"keep")
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    seed_module.reconcile_seed_documents(
+        admin.id,
+        session_factory=factory,
+        seed_root=seed_root,
+        target_root=target_root,
+        document_specs=(
+            ("Guide", "guide.md", ((SubjectType.AUTHENTICATED, "*"),)),
+        ),
+    )
+
+    assert not abandoned.exists()
+    assert not legacy_abandoned.exists()
+    assert user_file.read_bytes() == b"keep"
+    assert near_match.read_bytes() == b"keep"
+    assert unconfigured.read_bytes() == b"keep"
+
+
 def test_wrong_staging_token_cannot_finalize_or_replace(
     session: Session, admin: User, tmp_path: Path
 ) -> None:

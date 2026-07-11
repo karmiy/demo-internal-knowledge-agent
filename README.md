@@ -65,7 +65,7 @@ docker compose ps
 
 如果端口已被占用，可以在 `.env` 设置 `FRONTEND_PORT=13000` 和 `BACKEND_PORT=18000`，然后访问对应的新端口。
 
-启动过程中，backend 会自动更新数据库结构并写入演示数据；ingest worker 会使用本地 embedding 处理 12 份真实感示例文档，并在启动时自动将旧版本地索引升级到当前版本。12 份文档按 ACL 分为 6 份全员文档、3 份 Engineering 文档、2 份 HR/Admin 文档和 1 份 Admin-only 文档。Ingest 不需要 Anthropic Key，只有生成聊天回答时才会调用 Claude。
+启动过程中，backend 会自动更新数据库结构并写入演示数据；ingest worker 会使用本地 embedding 处理 12 份真实感示例文档，并在启动时自动将旧版本地索引升级到当前版本。12 份文档按 ACL 分为 6 份全员文档、3 份 Engineering 文档、2 份 HR/Admin 文档和 1 份 Admin-only 文档。启动时会先完整检查全部预置文档；任一文件缺失、不是普通文件或不可读时，backend 会列出所有无效文件并停止 seed，不会部分更新数据库或已安装文档。Ingest 不需要 Anthropic Key，只有生成聊天回答时才会调用 Claude。
 
 ## 日常 Docker 操作
 

@@ -3,7 +3,8 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import os
-import tempfile
+import re
+import stat
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -115,6 +116,10 @@ class SeedOperationLost(RuntimeError):
     """A seed operation no longer owns its document staging marker."""
 
 
+class SeedSourcePreflightError(RuntimeError):
+    """One or more configured seed sources cannot be reconciled safely."""
+
+
 @dataclass(frozen=True)
 class SeedDocumentOperation:
     document_id: UUID
@@ -135,6 +140,64 @@ class SeedPreparation:
 
 def _seed_staging_marker(token: str) -> str:
     return f"{SEED_FILE_STAGING_ERROR}:{token}"
+
+
+def _preflight_seed_sources(
+    seed_root: Path,
+    document_specs: tuple[
+        tuple[str, str, tuple[tuple[SubjectType, str], ...]], ...
+    ],
+) -> dict[str, bytes]:
+    contents: dict[str, bytes] = {}
+    invalid: list[str] = []
+    for _title, filename, _permissions in document_specs:
+        source = seed_root / filename
+        try:
+            source_stat = source.stat()
+        except FileNotFoundError:
+            invalid.append(f"{filename} (missing)")
+            continue
+        except OSError as exc:
+            invalid.append(f"{filename} (unreadable: {exc.strerror or exc})")
+            continue
+        if not stat.S_ISREG(source_stat.st_mode):
+            invalid.append(f"{filename} (not a regular file)")
+            continue
+        try:
+            contents[filename] = source.read_bytes()
+        except OSError as exc:
+            invalid.append(f"{filename} (unreadable: {exc.strerror or exc})")
+
+    if invalid:
+        raise SeedSourcePreflightError(
+            "invalid configured seed sources: " + ", ".join(invalid)
+        )
+    return contents
+
+
+def _seed_temp_path(target: Path, token: str) -> Path:
+    return target.parent / f".{target.name}.seed-{token}.tmp"
+
+
+def _cleanup_abandoned_seed_temp_files(
+    target_root: Path,
+    document_specs: tuple[
+        tuple[str, str, tuple[tuple[SubjectType, str], ...]], ...
+    ],
+) -> None:
+    """Remove only this protocol's exact temp namespace while lock-owned."""
+    for _title, filename, _permissions in document_specs:
+        pattern = re.compile(
+            rf"^\.{re.escape(filename)}\."
+            r"(?:seed-[0-9a-f]{32}|[a-z0-9_]{8})\.tmp$"
+        )
+        for candidate in target_root.iterdir():
+            if (
+                pattern.fullmatch(candidate.name)
+                and candidate.is_file()
+                and not candidate.is_symlink()
+            ):
+                candidate.unlink()
 
 
 @contextmanager
@@ -238,6 +301,7 @@ def _prepare_seed_documents(
         tuple[str, str, tuple[tuple[SubjectType, str], ...]], ...
     ]
     | None = None,
+    source_contents: dict[str, bytes] | None = None,
 ) -> SeedPreparation:
     seed_root = Path("/seed-documents") if seed_root is None else Path(seed_root)
     target_root = (
@@ -246,6 +310,11 @@ def _prepare_seed_documents(
         else Path(target_root)
     )
     document_specs = DEMO_DOCUMENTS if document_specs is None else document_specs
+    source_contents = (
+        _preflight_seed_sources(seed_root, document_specs)
+        if source_contents is None
+        else source_contents
+    )
     target_root.mkdir(parents=True, exist_ok=True)
     operations: list[SeedDocumentOperation] = []
     unassigned_staged: Path | None = None
@@ -253,11 +322,7 @@ def _prepare_seed_documents(
 
     try:
         for title, filename, permissions in document_specs:
-            source = seed_root / filename
-            if not source.exists():
-                continue
-
-            content = source.read_bytes()
+            content = source_contents[filename]
             checksum = hashlib.sha256(content).hexdigest()
             target = target_root / filename
             file_changed = not target.exists() or target.read_bytes() != content
@@ -284,13 +349,14 @@ def _prepare_seed_documents(
 
             staged: Path | None = None
             if file_changed:
-                descriptor, staged_name = tempfile.mkstemp(
-                    dir=target.parent,
-                    prefix=f".{target.name}.",
-                    suffix=".tmp",
-                )
-                staged = Path(staged_name)
+                staging_token = uuid4().hex
+                staged = _seed_temp_path(target, staging_token)
                 try:
+                    descriptor = os.open(
+                        staged,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                        0o600,
+                    )
                     with os.fdopen(descriptor, "wb") as staged_file:
                         staged_file.write(content)
                 except Exception:
@@ -411,15 +477,28 @@ def reconcile_seed_documents(
         resolved_target_root,
         timeout_seconds=reconciliation_lock_timeout,
     ):
+        resolved_seed_root = (
+            Path("/seed-documents") if seed_root is None else Path(seed_root)
+        )
+        resolved_document_specs = (
+            DEMO_DOCUMENTS if document_specs is None else document_specs
+        )
+        source_contents = _preflight_seed_sources(
+            resolved_seed_root, resolved_document_specs
+        )
+        _cleanup_abandoned_seed_temp_files(
+            resolved_target_root, resolved_document_specs
+        )
         preparation: SeedPreparation | None = None
         with session_factory() as session:
             try:
                 preparation = _prepare_seed_documents(
                     session,
                     admin_id,
-                    seed_root=seed_root,
+                    seed_root=resolved_seed_root,
                     target_root=resolved_target_root,
-                    document_specs=document_specs,
+                    document_specs=resolved_document_specs,
+                    source_contents=source_contents,
                 )
                 session.commit()
             except Exception:
