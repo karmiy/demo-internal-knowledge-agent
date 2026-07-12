@@ -564,12 +564,43 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
     }
+    .vector-note {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
+      gap: 22px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 22px 24px;
+      color: var(--white);
+      background: var(--forest);
+      border-radius: 2px 24px 2px 2px;
+      box-shadow: var(--shadow);
+    }
+    .vector-note-label { display: block; margin-bottom: 7px; color: var(--mint); font: 800 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; }
+    .vector-note strong { display: block; font-size: 17px; line-height: 1.55; }
+    .vector-note p { margin: 6px 0 0; color: #bdcec8; font-size: 13px; }
+    .same-table {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 9px;
+      align-items: center;
+      padding: 13px;
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.17);
+      font: 10px var(--mono);
+      text-align: center;
+    }
+    .same-table span { padding: 8px 7px; color: var(--forest); background: var(--mint); }
+    .same-table b { color: var(--sun); font-size: 17px; }
     .entity { background: var(--white); border: 1px solid var(--line); }
     .entity h3 { margin: 0; padding: 14px 16px; background: var(--paper-deep); font-family: var(--mono); font-size: 13px; }
     .entity ul { list-style: none; padding: 8px 16px 13px; margin: 0; }
     .entity li { padding: 5px 0; border-bottom: 1px dotted var(--line); color: var(--muted); font-family: var(--mono); font-size: 11px; }
     .entity li:last-child { border-bottom: 0; }
     .entity li b { color: var(--ink); }
+    .entity.vector-entity { border: 2px solid var(--forest); box-shadow: 7px 7px 0 rgba(23,66,55,.1); }
+    .entity.vector-entity h3 { color: var(--white); background: var(--forest); }
+    .entity.vector-entity li.vector-field { color: var(--forest); background: rgba(168,230,193,.22); font-weight: 800; }
 
     .api-list { display: grid; gap: 9px; }
     .endpoint {
@@ -693,6 +724,7 @@
     @media (max-width: 720px) {
       .hero { min-height: 0; padding-top: 60px; }
       .hero-meta, .grid-2, .grid-3, .scope-list, .architecture, .schema, .screen-strip { grid-template-columns: 1fr; }
+      .vector-note { grid-template-columns: 1fr; }
       .section-head { grid-template-columns: 1fr; gap: 5px; }
       .section { padding-top: 66px; padding-bottom: 66px; }
       .flow, .docker, .test-grid, .milestones { grid-template-columns: 1fr; }
@@ -1018,12 +1050,22 @@
           <div class="section-no">06 / DATA</div>
           <div><h2>一套数据库，七类核心实体。</h2><p>Demo 使用 PostgreSQL 同时承载关系数据和向量，减少运维组件。会话检查点也存储在同一数据库。</p></div>
         </div>
+        <aside class="vector-note reveal" aria-label="Embedding 向量存储说明">
+          <div>
+            <span class="vector-note-label">Where vectors live</span>
+            <strong>Chunk 文本和 Embedding 向量存放在同一张 PostgreSQL <code>document_chunks</code> 表中。</strong>
+            <p><code>pgvector</code> 为 PostgreSQL 提供 <code>vector(n)</code> 字段类型和向量相似度计算能力，不需要额外部署独立向量数据库。</p>
+          </div>
+          <div class="same-table" aria-label="同一张 document_chunks 表中的字段">
+            <span>content<br>文本片段</span><b>+</b><span>embedding<br>vector(n)</span>
+          </div>
+        </aside>
         <div class="schema reveal">
           <article class="entity"><h3>users</h3><ul><li><b>id</b> uuid pk</li><li>username unique</li><li>password_hash</li><li>department_id fk</li><li>is_active</li></ul></article>
           <article class="entity"><h3>roles / user_roles</h3><ul><li><b>roles.id</b> pk</li><li>roles.name unique</li><li><b>user_roles.user_id</b></li><li><b>user_roles.role_id</b></li></ul></article>
           <article class="entity"><h3>documents</h3><ul><li><b>id</b> uuid pk</li><li>title / source_path</li><li>status / error</li><li>checksum unique</li><li>created_by / timestamps</li></ul></article>
           <article class="entity"><h3>document_permissions</h3><ul><li><b>document_id</b> fk</li><li><b>subject_type</b></li><li><b>subject_id</b></li><li>unique(document, subject)</li></ul></article>
-          <article class="entity"><h3>document_chunks</h3><ul><li><b>id</b> uuid pk</li><li>document_id fk</li><li>content / page_number</li><li>chunk_index / metadata</li><li>embedding vector(n)</li></ul></article>
+          <article class="entity vector-entity"><h3>document_chunks · 文本与向量同表</h3><ul><li><b>id</b> uuid pk</li><li>document_id fk</li><li class="vector-field">content / page_number</li><li>chunk_index / metadata</li><li class="vector-field">embedding vector(n) · pgvector</li></ul></article>
           <article class="entity"><h3>salaries</h3><ul><li><b>user_id</b> pk fk</li><li>amount numeric</li><li>currency</li><li>effective_date</li></ul></article>
           <article class="entity"><h3>audit_logs</h3><ul><li><b>id</b> bigserial pk</li><li>user_id / action</li><li>resource_type / id</li><li>allowed / reason</li><li>latency_ms / created_at</li></ul></article>
           <article class="entity"><h3>graph checkpoints</h3><ul><li><b>thread_id</b></li><li>checkpoint namespace</li><li>conversation state</li><li>owner user_id mapping</li></ul></article>
