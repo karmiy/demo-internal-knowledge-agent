@@ -376,42 +376,53 @@
     .legend-item::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--signal); }
     .legend-item.chain::before { background: var(--mint); }
     .legend-item.trusted::before { background: var(--sun); }
-    .blueprint-lane { position: relative; margin-top: 22px; }
-    .lane-label { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; color: var(--mint); font: 800 10px var(--mono); letter-spacing: .15em; text-transform: uppercase; }
-    .lane-label::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,.13); }
-    .graph-entry, .graph-merge { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: 8px; }
-    .graph-node {
+    .journey-flow { position: relative; margin-top: 26px; }
+    .journey-row { display: flex; align-items: stretch; justify-content: center; gap: 9px; }
+    .journey-arrow { display: grid; place-items: center; min-width: 20px; color: var(--signal); font: 900 19px var(--mono); }
+    .journey-down { height: 34px; display: grid; place-items: center; color: var(--signal); font: 900 20px var(--mono); }
+    .journey-node {
+      position: relative;
       display: grid;
-      place-items: center;
-      min-height: 54px;
-      padding: 10px 14px;
-      text-align: center;
+      align-content: center;
+      min-height: 66px;
+      padding: 13px 16px;
       color: var(--white);
-      background: rgba(229,101,61,.2);
-      border: 1px solid rgba(229,101,61,.7);
-      border-radius: 2px 13px 2px 2px;
-      font: 700 12px var(--mono);
+      background: rgba(229,101,61,.18);
+      border: 1px solid rgba(229,101,61,.72);
+      border-radius: 2px 14px 2px 2px;
     }
-    .graph-node small { display: block; margin-top: 4px; color: #c9d5d1; font: 9px var(--mono); }
-    .graph-node.terminal { min-height: auto; color: var(--forest); background: var(--sun); border-color: var(--sun); border-radius: 2px; }
-    .graph-arrow { display: grid; place-items: center; color: var(--signal); font: 900 18px var(--mono); }
-    .graph-branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
-    .graph-branch { padding: 13px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.14); }
-    .branch-name { display: block; margin-bottom: 10px; color: var(--sun); font: 800 10px var(--mono); }
-    .graph-branch .graph-node { width: 100%; }
-    .graph-branch .graph-arrow { min-height: 25px; }
-    .lane-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .capability-card {
-      min-height: 108px;
-      padding: 16px;
-      color: var(--forest);
-      background: var(--mint);
-      border-radius: 2px 16px 2px 2px;
-    }
-    .capability-card.trusted { background: var(--sun); }
-    .capability-card span { display: block; margin-bottom: 9px; font: 800 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; opacity: .72; }
-    .capability-card strong { display: block; margin-bottom: 5px; }
-    .capability-card small { color: #355f52; line-height: 1.45; }
+    .journey-node .node-type { display: block; margin-bottom: 5px; color: #ff9b79; font: 800 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    .journey-node strong { display: block; font: 800 13px var(--mono); }
+    .journey-node small { display: block; margin-top: 5px; color: #c7d7d1; line-height: 1.4; }
+    .journey-node.trusted { color: var(--forest); background: var(--sun); border-color: var(--sun); }
+    .journey-node.trusted .node-type { color: #765b14; }
+    .journey-node.trusted small { color: #4d644e; }
+    .journey-node.chain { color: var(--forest); background: var(--mint); border-color: var(--mint); }
+    .journey-node.chain .node-type { color: #35614f; }
+    .journey-node.chain small { color: #355f52; }
+    .journey-node.start, .journey-node.end { min-width: 74px; min-height: 66px; place-items: center; text-align: center; border-radius: 2px; }
+    .journey-node.wide { width: min(100%, 310px); }
+    .journey-node.return { width: min(100%, 190px); }
+    .journey-label { margin-bottom: 11px; color: var(--mint); font: 800 10px var(--mono); letter-spacing: .14em; text-align: center; text-transform: uppercase; }
+    .route-fan { position: relative; padding-top: 30px; }
+    .route-fan::before { content: ""; position: absolute; left: 16.666%; right: 16.666%; top: 8px; height: 1px; background: rgba(229,101,61,.75); }
+    .route-fan::after { content: ""; position: absolute; left: 50%; top: 0; width: 1px; height: 9px; background: rgba(229,101,61,.75); }
+    .journey-branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+    .journey-branch { position: relative; padding: 16px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.15); }
+    .journey-branch::before { content: ""; position: absolute; left: 50%; top: -22px; width: 1px; height: 21px; background: rgba(229,101,61,.75); }
+    .branch-name { display: block; margin-bottom: 12px; color: var(--sun); font: 800 10px var(--mono); letter-spacing: .06em; }
+    .branch-call { margin-top: 10px; padding-top: 26px; position: relative; }
+    .branch-call::before { content: "calls ↓"; position: absolute; top: 3px; left: 0; right: 0; color: #9eb0aa; text-align: center; font: 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    .call-stack { display: grid; gap: 7px; }
+    .call-stack .journey-node { min-height: 58px; }
+    .no-chain { display: block; margin-top: 8px; color: #9eb0aa; text-align: center; font: 9px var(--mono); }
+    .merge-line { position: relative; height: 42px; }
+    .merge-line::before { content: ""; position: absolute; left: 16.666%; right: 16.666%; top: 12px; height: 1px; background: rgba(229,101,61,.75); }
+    .merge-line::after { content: "↓"; position: absolute; left: 50%; top: 7px; transform: translateX(-50%); color: var(--signal); font: 900 19px var(--mono); }
+    .compose-block { display: grid; grid-template-columns: minmax(210px, .8fr) 28px minmax(0, 1.4fr); align-items: stretch; max-width: 900px; margin: 0 auto; }
+    .compose-calls { display: grid; grid-template-columns: 1fr 28px 1fr; }
+    .finish-row { display: grid; grid-template-columns: repeat(7, auto); align-items: stretch; justify-content: center; gap: 8px; }
+    .finish-row .journey-node { max-width: 190px; }
     .state-strip { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
     .state-strip span { padding: 6px 8px; color: #bdcec8; border: 1px solid rgba(255,255,255,.16); font: 10px var(--mono); }
     .blueprint-rule { margin-top: 22px; padding: 16px 18px; color: var(--forest); background: var(--white); border-left: 5px solid var(--signal); font-size: 14px; }
@@ -687,12 +698,18 @@
       .flow, .docker, .test-grid, .milestones { grid-template-columns: 1fr; }
       .brancher { grid-template-columns: 1fr; }
       .route-grid { grid-template-columns: 1fr; }
-      .blueprint-head, .graph-branches, .lane-grid { grid-template-columns: 1fr; }
+      .blueprint-head, .journey-branches, .compose-block, .compose-calls, .finish-row { grid-template-columns: 1fr; }
       .blueprint-head { align-items: start; }
       .blueprint-legend { justify-content: flex-start; }
-      .graph-entry, .graph-merge { flex-direction: column; }
-      .graph-arrow { min-height: 24px; transform: rotate(90deg); }
-      .graph-branch .graph-arrow { transform: none; }
+      .journey-row { flex-direction: column; }
+      .journey-arrow { min-height: 24px; transform: rotate(90deg); }
+      .journey-node.wide, .journey-node.return, .finish-row .journey-node { width: 100%; max-width: none; }
+      .route-fan { padding-top: 12px; }
+      .route-fan::before, .route-fan::after, .journey-branch::before, .merge-line::before { display: none; }
+      .journey-branch { margin-top: 10px; }
+      .merge-line { height: 38px; }
+      .compose-block > .journey-arrow, .compose-calls > .journey-arrow { transform: rotate(90deg); }
+      .finish-row .journey-arrow { min-height: 24px; }
       .case-head, .case-outcomes { grid-template-columns: 1fr; }
       .case-head { align-items: start; }
       .case-actor { justify-self: start; }
@@ -813,9 +830,9 @@
           <div class="section-no">02B / AGENT FLOW</div>
           <div><h2>LangGraph 控制路径，LangChain 提供能力。</h2><p>这不是一个自由发挥的 Agent：Graph 负责状态、分支和执行顺序，LangChain 负责接入 Claude 与 Embedding，权限和数据访问始终留在可信业务代码中。</p></div>
         </div>
-        <div class="agent-blueprint reveal" role="img" aria-label="LangGraph 控制流程、LangChain 能力层与可信业务代码层的分层设计图">
+        <div class="agent-blueprint reveal" role="img" aria-label="从用户提问到返回答案的 LangGraph、LangChain 与业务代码完整调用流程图">
           <header class="blueprint-head">
-            <div><div class="blueprint-kicker">Actual implementation / controlled agent</div><h3>一个问题如何穿过三层系统</h3></div>
+            <div><div class="blueprint-kicker">Actual implementation / end-to-end call graph</div><h3>一个提问，完整走完哪些节点</h3></div>
             <div class="blueprint-legend" aria-label="图例">
               <span class="legend-item">LangGraph 节点</span>
               <span class="legend-item chain">LangChain 能力</span>
@@ -823,41 +840,79 @@
             </div>
           </header>
 
-          <div class="blueprint-lane">
-            <div class="lane-label">01 · LangGraph control plane</div>
-            <div class="graph-entry">
-              <div class="graph-node terminal">START</div><div class="graph-arrow">→</div>
-              <div class="graph-node">route_query<small>Python 关键词分类</small></div>
+          <div class="journey-flow">
+            <div class="journey-label">Request boundary</div>
+            <div class="journey-row">
+              <div class="journey-node trusted"><span class="node-type">Browser</span><strong>用户提交问题</strong><small>question + JWT + thread_id</small></div>
+              <div class="journey-arrow">→</div>
+              <div class="journey-node trusted wide"><span class="node-type">FastAPI /api/chat</span><strong>鉴权并确认会话归属</strong><small>从数据库加载可信 actor，客户端角色不参与授权</small></div>
+              <div class="journey-arrow">→</div>
+              <div class="journey-node trusted start"><strong>START</strong></div>
             </div>
-            <div class="graph-branches">
-              <div class="graph-branch"><span class="branch-name">documents</span><div class="graph-node">retrieve_documents<small>ACL 后向量检索</small></div></div>
-              <div class="graph-branch"><span class="branch-name">employee_data</span><div class="graph-node">query_employee_data<small>确定性调用内部函数</small></div></div>
-              <div class="graph-branch"><span class="branch-name">mixed</span><div class="graph-node">retrieve_documents</div><div class="graph-arrow">↓</div><div class="graph-node">query_employee_data</div></div>
-            </div>
-            <div class="graph-merge">
-              <div class="graph-node">compose_answer<small>有证据才调用 Claude</small></div><div class="graph-arrow">→</div>
-              <div class="graph-node">verify_answer<small>校验引用属于当前证据</small></div><div class="graph-arrow">→</div>
-              <div class="graph-node">audit_run<small>记录资源与结果</small></div><div class="graph-arrow">→</div>
-              <div class="graph-node terminal">END</div>
-            </div>
-          </div>
 
-          <div class="blueprint-lane">
-            <div class="lane-label">02 · LangChain capability layer</div>
-            <div class="lane-grid">
-              <div class="capability-card"><span>Model adapter</span><strong>ChatAnthropic</strong><small>连接 Claude，只在 compose_answer 阶段组织答案。</small></div>
-              <div class="capability-card"><span>Message contract</span><strong>SystemMessage + HumanMessage</strong><small>把规则和已授权证据封装为模型输入。</small></div>
-              <div class="capability-card"><span>Vector contract</span><strong>Embeddings interface</strong><small>LocalHashEmbeddings 实现接口，供 pgvector 检索使用。</small></div>
-            </div>
-          </div>
+            <div class="journey-down">↓</div>
+            <div class="journey-row"><div class="journey-node wide"><span class="node-type">LangGraph node</span><strong>route_query</strong><small>Python 关键词逻辑选择 documents / employee_data / mixed</small></div></div>
 
-          <div class="blueprint-lane">
-            <div class="lane-label">03 · Trusted application & data layer</div>
-            <div class="lane-grid">
-              <div class="capability-card trusted"><span>Identity boundary</span><strong>FastAPI actor context</strong><small>校验 JWT、会话归属，客户端不能伪造角色和部门。</small></div>
-              <div class="capability-card trusted"><span>Authorization boundary</span><strong>ACL search + salary policy</strong><small>文档过滤和薪资行级权限在数据进入模型前执行。</small></div>
-              <div class="capability-card trusted"><span>Data boundary</span><strong>PostgreSQL + pgvector + audit</strong><small>保存业务数据、向量、引用来源和运行审计。</small></div>
+            <div class="route-fan">
+              <div class="journey-branches">
+                <div class="journey-branch">
+                  <span class="branch-name">documents · 文档问题</span>
+                  <div class="journey-node"><span class="node-type">LangGraph node</span><strong>retrieve_documents</strong><small>把 actor 和问题交给授权检索</small></div>
+                  <div class="branch-call">
+                    <div class="call-stack">
+                      <div class="journey-node chain"><span class="node-type">LangChain Embeddings</span><strong>LocalHashEmbeddings</strong><small>将问题转换成查询向量</small></div>
+                      <div class="journey-node trusted"><span class="node-type">Application SQL + data store</span><strong>ACL filter + pgvector search</strong><small>SQL 同时限定授权文档并按向量距离排序</small></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="journey-branch">
+                  <span class="branch-name">employee_data · 员工数据</span>
+                  <div class="journey-node"><span class="node-type">LangGraph node</span><strong>query_employee_data</strong><small>识别目标账号并调用内部数据函数</small></div>
+                  <div class="branch-call">
+                    <div class="call-stack">
+                      <div class="journey-node trusted"><span class="node-type">Internal function</span><strong>get_salary → load target</strong><small>先按用户名从 PostgreSQL 加载目标员工</small></div>
+                      <div class="journey-node trusted"><span class="node-type">Application policy</span><strong>can_read_salary</strong><small>本人 / HR / Admin 行级权限判断</small></div>
+                      <div class="journey-node trusted"><span class="node-type">PostgreSQL query</span><strong>load salary row</strong><small>授权通过后才读取结构化薪资记录</small></div>
+                    </div>
+                    <span class="no-chain">不经过 LangChain；这是项目自己的确定性业务调用</span>
+                  </div>
+                </div>
+
+                <div class="journey-branch">
+                  <span class="branch-name">mixed · 混合问题</span>
+                  <div class="call-stack">
+                    <div class="journey-node"><span class="node-type">LangGraph node</span><strong>retrieve_documents</strong><small>执行左侧完整文档检索链</small></div>
+                    <div class="journey-down">↓</div>
+                    <div class="journey-node"><span class="node-type">LangGraph node</span><strong>query_employee_data</strong><small>再执行中间完整员工数据链</small></div>
+                  </div>
+                  <span class="no-chain">两类证据都保存在同一 Graph state 中</span>
+                </div>
+              </div>
             </div>
+
+            <div class="merge-line" aria-hidden="true"></div>
+            <div class="compose-block">
+              <div class="journey-node"><span class="node-type">LangGraph node</span><strong>compose_answer</strong><small>无授权证据则直接安全拒答</small></div>
+              <div class="journey-arrow">→</div>
+              <div class="compose-calls">
+                <div class="journey-node chain"><span class="node-type">LangChain Messages</span><strong>SystemMessage + HumanMessage</strong><small>封装规则、问题和已授权证据</small></div>
+                <div class="journey-arrow">→</div>
+                <div class="journey-node chain"><span class="node-type">LangChain model adapter</span><strong>ChatAnthropic → Claude</strong><small>只负责基于证据组织自然语言答案</small></div>
+              </div>
+            </div>
+
+            <div class="journey-down">↓</div>
+            <div class="finish-row">
+              <div class="journey-node"><span class="node-type">LangGraph node</span><strong>verify_answer</strong><small>引用 ID 必须属于当前证据</small></div>
+              <div class="journey-arrow">→</div>
+              <div class="journey-node"><span class="node-type">LangGraph node</span><strong>audit_run</strong><small>记录路由、资源、允许/拒绝</small></div>
+              <div class="journey-arrow">→</div>
+              <div class="journey-node trusted end"><strong>END</strong></div>
+              <div class="journey-arrow">→</div>
+              <div class="journey-node trusted return"><span class="node-type">FastAPI response</span><strong>返回前端</strong><small>answer + citations + activity</small></div>
+            </div>
+
             <div class="state-strip" aria-label="LangGraph 状态字段">
               <span>message</span><span>actor</span><span>session</span><span>thread_id</span><span>route</span><span>evidence</span><span>citations</span><span>activity</span>
             </div>
